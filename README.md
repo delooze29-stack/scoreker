@@ -9,12 +9,12 @@ Weekend football predictions for two players, played as a frame of snooker.
 ## How a frame works
 
 1. Each weekend the Action picks 13 games: **1 red** (earliest kick-off), **6 free-colour games** (Championship) and **6 clearance games** (Premier League), plus a **tie-break** game (the last Premier League game of the weekend). Colours come from the odds: most one-sided = yellow (2), most even = black (7).
-2. Both players predict every score before the red kicks off. Predictions are hidden from each other until then.
-3. Red right = 1 point + choose a free colour (one of the Championship games) before they kick off. Pot it = its value; miss it = break over.
+2. Both players predict the red, the 6 clearance games and the tie-break before the red kicks off. Hidden from each other until then.
+3. Free colour: pick ONE of the 6 Championship games and predict just that one, any time before they kick off (hidden from the other player until then). It only counts if you pot the red (right result = 1). Pot it = its value; miss it = break over.
 4. Miss the red = no free colour, but you still play the clearance.
 5. Clearance: yellow → black in order; a miss ends the break.
 6. Exact score = double points. Max break: 1×2 + 7×2 + 27×2 = 70.
-7. Higher score wins the frame. Level → most exact scores (all 13 games) → closer prediction on the tie-break game → drawn.
+7. Higher score wins the frame. Level → most exact scores → closer prediction on the tie-break game → drawn.
 8. Season: 1 point per frame won; highest break of the season gets +5 frames.
 
 ## Setup checklist

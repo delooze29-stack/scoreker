@@ -19,7 +19,7 @@ const S = {
   user: null, me: -1, view: 'frame', showPlayer: 0,
   week: null, weekError: null,
   preds: [null, null], hidden: [false, false], status: [null, null],
-  draft: null, saving: false,
+  draft: null, saving: false, freeHidden: [false, false],
   season: null, seasonLoading: false,
 };
 
@@ -80,13 +80,23 @@ async function ensureWeekDoc(w) {
   }
 }
 
+async function readDoc(...path) {
+  try { const snap = await getDoc(doc(db, ...path)); return { ok: true, data: snap.exists() ? snap.data() : null }; }
+  catch { return { ok: false, data: null }; }
+}
+
+// A player's predictions for a week: the main 8 games, plus their free colour pick
+// (kept in a separate document so it stays hidden until the free-colour games kick off).
 async function readPred(weekId, i) {
-  try {
-    const snap = await getDoc(doc(db, 'weeks', weekId, 'preds', emailOf(i)));
-    return { ok: true, data: snap.exists() ? snap.data() : null };
-  } catch (e) {
-    return { ok: false, data: null };
+  const [main, free] = await Promise.all([readDoc('weeks', weekId, 'preds', emailOf(i)), readDoc('weeks', weekId, 'free', emailOf(i))]);
+  if (!main.ok) return { ok: false, data: null, freeOk: free.ok };
+  if (!main.data && !free.data) return { ok: true, data: null, freeOk: free.ok };
+  const pred = { scores: { ...((main.data && main.data.scores) || {}) }, freeChoice: (main.data && main.data.freeChoice) || null };
+  if (free.data && free.data.colour) {
+    pred.freeChoice = free.data.colour;
+    if (free.data.gameId && Array.isArray(free.data.score)) pred.scores[free.data.gameId] = free.data.score;
   }
+  return { ok: true, data: pred, freeOk: free.ok, freeDoc: free.data };
 }
 
 async function loadPreds() {
@@ -96,13 +106,18 @@ async function loadPreds() {
   const res = await Promise.all([readPred(id, 0), readPred(id, 1)]);
   S.preds = res.map((r) => r.data);
   S.hidden = res.map((r) => !r.ok);
+  S.freeHidden = res.map((r) => !r.freeOk);
   const st = await Promise.all([0, 1].map(async (i) => {
     try { const s = await getDoc(doc(db, 'weeks', id, 'status', emailOf(i))); return s.exists() ? s.data() : null; } catch { return null; }
   }));
   S.status = st;
   if (!S.draft || S.draft.weekId !== id) {
     const mine = S.preds[S.me] || {};
-    S.draft = { weekId: id, scores: JSON.parse(JSON.stringify(mine.scores || {})), freeChoice: mine.freeChoice || null };
+    const scores = JSON.parse(JSON.stringify(mine.scores || {}));
+    const fg = mine.freeChoice ? S.week.free.find((g) => g.colour === mine.freeChoice) : null;
+    const freeScore = fg && Array.isArray(scores[fg.id]) ? scores[fg.id].slice() : [null, null];
+    for (const g of S.week.free) delete scores[g.id];
+    S.draft = { weekId: id, scores, free: { colour: mine.freeChoice || null, score: freeScore } };
   }
 }
 
@@ -156,37 +171,43 @@ async function login() {
   }
 }
 
+const mainGames = (w) => [w.red, ...w.clear, w.tiebreak].filter(Boolean);
+const full = (p) => Array.isArray(p) && p.length === 2 && p.every(Number.isInteger);
+function filledCount() {
+  const m = mainGames(S.week).filter((g) => full(S.draft.scores[g.id])).length;
+  const f = S.draft.free.colour && full(S.draft.free.score) ? 1 : 0;
+  return { filled: m + f, total: mainGames(S.week).length + 1 };
+}
+
 async function savePreds() {
-  if (!S.week || S.saving) return;
+  if (!S.week || S.saving || freeLocked()) return;
   const id = S.week.weekId;
-  const ref = doc(db, 'weeks', id, 'preds', emailOf(S.me));
+  const fr = S.draft.free;
+  if (fr.colour && !full(fr.score)) { toast('Put a score in for your free colour'); return; }
   S.saving = true; render();
   try {
-    await setDoc(ref, { scores: S.draft.scores, freeChoice: S.draft.freeChoice || null, name: PLAYERS[S.me].name, updatedAt: serverTimestamp() });
-    const games = allGames(S.week);
-    const filled = games.filter((g) => Array.isArray(S.draft.scores[g.id]) && S.draft.scores[g.id].every(Number.isInteger)).length;
-    await setDoc(doc(db, 'weeks', id, 'status', emailOf(S.me)), { filled, total: games.length, at: serverTimestamp() });
-    await loadPreds();
-    toast(filled === games.length ? 'Locked in ✓' : `Saved ${filled}/${games.length}`);
+    if (!redStarted()) {
+      const scores = {};
+      for (const g of mainGames(S.week)) if (S.draft.scores[g.id]) scores[g.id] = S.draft.scores[g.id];
+      await setDoc(doc(db, 'weeks', id, 'preds', emailOf(S.me)), { scores, name: PLAYERS[S.me].name, updatedAt: serverTimestamp() });
+    }
+    if (fr.colour) {
+      const g = S.week.free.find((x) => x.colour === fr.colour);
+      await setDoc(doc(db, 'weeks', id, 'free', emailOf(S.me)), { colour: fr.colour, gameId: g.id, score: fr.score, updatedAt: serverTimestamp() });
+    }
+    const { filled, total } = filledCount();
+    await setDoc(doc(db, 'weeks', id, 'status', emailOf(S.me)), { filled, total, at: serverTimestamp() });
+    const keep = S.draft; await loadPreds(); S.draft = keep;
+    toast(filled === total ? 'Locked in ✓' : `Saved ${filled}/${total}`);
   } catch (e) {
     console.error(e); toast('Could not save — predictions are locked');
   }
   S.saving = false; render();
 }
 
-async function chooseFree(colour) {
+function pickFree(colour) {
   if (!S.week || freeLocked()) return;
-  S.draft.freeChoice = colour;
-  const ref = doc(db, 'weeks', S.week.weekId, 'preds', emailOf(S.me));
-  try {
-    if (!redStarted()) {
-      await setDoc(ref, { scores: S.draft.scores, freeChoice: colour, name: PLAYERS[S.me].name, updatedAt: serverTimestamp() });
-    } else {
-      await updateDoc(ref, { freeChoice: colour, updatedAt: serverTimestamp() });
-    }
-    await loadPreds();
-    toast(`Going for the ${colour}`);
-  } catch (e) { console.error(e); toast('Could not save your colour'); }
+  if (S.draft.free.colour !== colour) S.draft.free = { colour, score: [null, null] };
   render();
 }
 
@@ -295,7 +316,7 @@ function breakRows(b, i) {
     let stage, fx, det;
     if (r.stage === 'free') {
       if (r.state === 'none') { stage = 'Free colour'; fx = 'No free colour — red missed'; det = 'Straight into the clearance'; }
-      else if (!r.game) { stage = 'Free colour'; fx = r.state === 'choose' ? 'Pick your colour before the 3pm games' : (r.note || 'Not chosen yet'); det = S.week.freeLock ? `Locks ${fmtKO(S.week.freeLock)}` : ''; }
+      else if (!r.game) { stage = 'Free colour'; fx = r.state === 'choose' ? (i === S.me ? 'Pick your free colour on the Predict screen' : 'Their pick is hidden until the free-colour games kick off') : (r.note || 'Not chosen yet'); det = S.week.freeLock ? `Locks ${fmtKO(S.week.freeLock)}` : ''; }
       else { stage = `Free colour · ${cap(r.colour)} ${VALUE[r.colour]} · ${esc(r.game.league)}`; fx = `${esc(r.game.home)} v ${esc(r.game.away)}`; det = `${gameLine(r.game)} · ${esc(youThem)} ${predText(r.pred)}`; }
     } else {
       stage = r.stage === 'red' ? 'Red · 1' : `${cap(r.colour)} · ${VALUE[r.colour]} · clearance`;
@@ -342,7 +363,7 @@ function bannerFor(b, i) {
     return [`Break over at ${b.total}`, `Missed on ${esc(what)}.`];
   }
   const next = b.rows.find((r) => ['live', 'pending', 'choose'].includes(r.state));
-  if (next && next.state === 'choose') return [`At the table · break ${b.total}`, `${esc(who)} potted the red — pick a free colour before ${fmtKO(S.week.freeLock)}.`];
+  if (next && next.state === 'choose') return [`At the table · break ${b.total}`, `${esc(who)} potted the red — pick a free colour on the Predict screen before ${fmtKO(S.week.freeLock)}.`];
   if (next && next.game) {
     const st = next.game.status === 'LIVE' ? `live now ${next.game.result[0]}–${next.game.result[1]}` : `kicks off ${fmtKO(next.game.kickoff)}`;
     return [`At the table · break ${b.total}`, `Next: ${next.colour === 'red' ? 'the red' : `the ${next.colour}`} — ${esc(next.game.home)} v ${esc(next.game.away)}, ${st}. ${esc(who)} went ${predText(next.pred)}.`];
@@ -379,7 +400,7 @@ function renderFrame() {
     ? `<div class="note"><b>Hidden until the red kicks off</b><p>${name(i)}'s predictions appear at ${fmtKO(S.week.redKickoff)}. ${S.status[i] ? `They've entered ${S.status[i].filled}/${S.status[i].total}.` : `They haven't entered yet.`}</p></div>`
     : `${tableView(b)}
       <div class="note"><b>${bt}</b><p>${bx}</p></div>
-      ${i === S.me && !freeLocked() && b.rows[0].state !== 'miss' ? freePicker() : ''}
+      ${i === S.me && !freeLocked() && b.rows[0].state !== 'miss' && !S.draft.free.colour ? `<div class="section"><button class="primary" data-nav="predict">Pick your free colour</button></div>` : ''}
       <section class="section" aria-label="Ball by ball"><div class="head"><h2>Ball by ball</h2><span class="small muted">Exact score = double</span></div>${breakRows(b, i)}</section>`;
 
   return `${header('SCOREKER', weekSub())}
@@ -393,28 +414,37 @@ function renderFrame() {
     <p class="small muted" style="margin:14px 16px 0;line-height:1.5">Level on points? Most exact scores wins. Still level: re-spotted black on ${S.week.tiebreak ? `${esc(S.week.tiebreak.home)} v ${esc(S.week.tiebreak.away)}` : 'the late game'}. Level again: frame drawn.</p>`;
 }
 
-function freePicker() {
+function freeSection() {
+  const w = S.week;
   const locked = freeLocked();
-  const chosen = S.draft && S.draft.freeChoice;
-  return `<section class="section" aria-labelledby="pick-h">
-    <div class="head"><h2 id="pick-h">Your free colour</h2><span class="small muted">${locked ? 'Locked' : `Locks ${fmtKO(S.week.freeLock)}`}</span></div>
-    <div class="small muted" style="margin-top:-4px">Only counts if you pot the red. Miss it and your break ends.</div>
-    <div class="picker">${S.week.free.map((g) => `
-      <button class="pick" data-free="${g.colour}" aria-pressed="${chosen === g.colour}" ${locked ? 'disabled' : ''}>
-        ${dot(g.colour)}<span class="lbl"><b>${cap(g.colour)} · ${VALUE[g.colour]}</b><span>${esc(g.home)} v ${esc(g.away)}</span></span>
+  const fr = S.draft.free;
+  const g = fr.colour ? w.free.find((x) => x.colour === fr.colour) : null;
+  const head = `<div class="head"><h2 id="pick-h">Free colour · ${esc(w.free[0].league)}</h2><span class="small muted">${locked ? 'Locked' : `Locks ${fmtKO(w.freeLock)}`}</span></div>`;
+  if (g) {
+    return `<section class="section" aria-labelledby="pick-h">${head}
+      <div class="small muted" style="margin-top:-4px">Only counts if you pot the red. Miss it and your break ends.</div>
+      ${predRow(g, `Your free colour · ${cap(g.colour)} ${VALUE[g.colour]}`, locked, true)}
+      ${locked ? '' : `<button class="linkbtn" data-pick="" style="align-self:flex-start">Change colour</button>`}
+    </section>`;
+  }
+  return `<section class="section" aria-labelledby="pick-h">${head}
+    <div class="small muted" style="margin-top:-4px">Pick ONE game to go for — now, or after you've seen the red. Only counts if you pot the red.</div>
+    <div class="picker">${w.free.map((x) => `
+      <button class="pick" data-pick="${x.colour}" ${locked ? 'disabled' : ''}>
+        ${dot(x.colour)}<span class="lbl"><b>${cap(x.colour)} · ${VALUE[x.colour]}</b><span>${esc(x.home)} v ${esc(x.away)}</span></span>
       </button>`).join('')}</div>
   </section>`;
 }
 
-function predRow(g, label, locked) {
-  const p = S.draft.scores[g.id] || [];
+function predRow(g, label, locked, isFree = false) {
+  const p = (isFree ? S.draft.free.score : S.draft.scores[g.id]) || [];
   const v = (x) => (Number.isInteger(x) ? x : '');
   return `<div class="pred-row">${dot(g.colour)}
     <div style="min-width:0"><div class="fx">${esc(g.home)} v ${esc(g.away)}</div><div class="det">${label ? label + ' · ' : ''}${fmtKO(g.kickoff)}</div></div>
     <div class="score">
-      <input type="number" inputmode="numeric" min="0" max="20" data-g="${g.id}" data-s="0" value="${v(p[0])}" aria-label="${esc(g.home)} goals" placeholder="–" ${locked ? 'disabled' : ''}>
+      <input type="number" inputmode="numeric" min="0" max="20" data-g="${g.id}" data-s="0" ${isFree ? 'data-fr="1"' : ''} value="${v(p[0])}" aria-label="${esc(g.home)} goals" placeholder="–" ${locked ? 'disabled' : ''}>
       <span class="muted" aria-hidden="true">–</span>
-      <input type="number" inputmode="numeric" min="0" max="20" data-g="${g.id}" data-s="1" value="${v(p[1])}" aria-label="${esc(g.away)} goals" placeholder="–" ${locked ? 'disabled' : ''}>
+      <input type="number" inputmode="numeric" min="0" max="20" data-g="${g.id}" data-s="1" ${isFree ? 'data-fr="1"' : ''} value="${v(p[1])}" aria-label="${esc(g.away)} goals" placeholder="–" ${locked ? 'disabled' : ''}>
     </div>${oddsStrip(g, p)}</div>`;
 }
 
@@ -438,35 +468,33 @@ function oddsStrip(g, p) {
     ${cell(1, g.home, o.home)}${cell(0, 'Draw', o.draw)}${cell(-1, g.away, o.away)}</div>`;
 }
 
-function highlightOdds(id) {
+function highlightOdds(id, p) {
   const strip = $app.querySelector(`[data-odds="${CSS.escape(id)}"]`);
   if (!strip) return;
-  const pick = pickOf(S.draft.scores[id]);
+  const pick = pickOf(p);
   strip.querySelectorAll('.odd').forEach((el) => el.classList.toggle('on', pick === +el.dataset.k));
 }
 
 function renderPredict() {
   if (!S.week) return `${header('PREDICT', weekSub())}<div class="note"><b>No frame yet</b><p>${esc(S.weekError || '')}</p></div>`;
   const locked = redStarted();
+  const allLocked = freeLocked();
   const w = S.week;
   const opp = other(S.me);
-  const games = allGames(w);
-  const filled = games.filter((g) => Array.isArray(S.draft.scores[g.id]) && S.draft.scores[g.id].every(Number.isInteger)).length;
+  const { filled, total } = filledCount();
   const oppTxt = S.status[opp] ? `${name(opp)} has entered ${S.status[opp].filled}/${S.status[opp].total}.` : `${name(opp)} hasn't entered yet.`;
-  return `${header('PREDICT', `${weekSub()} · ${games.length} games to call`)}
-    <div class="note"><b>${locked ? 'Predictions are locked' : `Locks at the red kick-off · ${fmtKO(w.redKickoff)}`}</b>
-      <p>${locked ? 'The red has kicked off. You can still pick your free colour until the 3pm games.' : `${oppTxt} Their scores stay hidden until kick-off.`}</p></div>
+  const btn = S.saving ? 'Saving…' : allLocked ? 'Locked' : locked ? 'Save free colour' : `Save predictions (${filled}/${total})`;
+  return `${header('PREDICT', `${weekSub()} · ${total} games to call`)}
+    <div class="note"><b>${allLocked ? 'Everything is locked' : locked ? 'Main predictions are locked' : `Locks at the red kick-off · ${fmtKO(w.redKickoff)}`}</b>
+      <p>${allLocked ? 'Enjoy the football.' : locked ? `The red has kicked off. You can still pick or change your free colour until ${fmtKO(w.freeLock)}.` : `${oppTxt} Their scores stay hidden until kick-off.`}</p></div>
     <section class="section"><div class="head"><h2>The red</h2><span class="small muted">Result right = 1 + free colour</span></div>${predRow(w.red, '', locked)}</section>
-    ${freePicker()}
-    <section class="section"><div class="head"><h2>Free colour · ${esc(w.free[0].league)}</h2></div>
-      <div class="small muted" style="margin-top:-4px">Predict all six. Only the one you pick counts.</div>
-      ${w.free.map((g) => predRow(g, `${cap(g.colour)} ${VALUE[g.colour]}`, locked)).join('')}</section>
+    ${freeSection()}
     <section class="section"><div class="head"><h2>Clearance · yellow to black</h2></div>
       <div class="small muted" style="margin-top:-4px">Played in order. A miss ends your break.</div>
       ${w.clear.map((g) => predRow(g, `${cap(g.colour)} ${VALUE[g.colour]}${g.league !== 'PL' ? ' · ' + esc(g.league) : ''}`, locked)).join('')}</section>
     ${w.tiebreak ? `<section class="section"><div class="head"><h2>Tie-break game</h2><span class="small muted">Only if the frame is level</span></div>${predRow(w.tiebreak, '', locked)}</section>` : ''}
     <div class="section" style="margin-bottom:20px">
-      <button class="primary ${filled === games.length && !locked ? '' : ''}" id="save" ${locked || S.saving ? 'disabled' : ''}>${S.saving ? 'Saving…' : locked ? 'Locked' : `Save predictions (${filled}/${games.length})`}</button>
+      <button class="primary" id="save" ${allLocked || S.saving ? 'disabled' : ''}>${btn}</button>
       <div class="small muted" style="text-align:center">Colours set from bookmaker odds: closer match = higher colour.</div>
     </div>`;
 }
@@ -497,11 +525,11 @@ function renderSeason() {
 function renderRules() {
   return `${header('RULES', 'How a frame works')}
     <section class="section"><ol class="rules">
-      <li>Each weekend is one frame. The app picks 13 games: <b>1 red</b>, <b>6 free-colour games</b> (Championship) and <b>6 clearance games</b> (Premier League), plus a tie-break game.</li>
+      <li>Each weekend is one frame: <b>1 red</b>, <b>6 clearance games</b> (Premier League), a <b>tie-break</b> game, and <b>6 Championship games</b> to choose your free colour from.</li>
       <li>Colours come from the odds: the most one-sided game is yellow (2), the most even is black (7).</li>
-      <li>Predict every score before the red kicks off. You can't see each other's until then.</li>
-      <li><b>The red</b> is the first game. Right result = 1 point and a free colour.</li>
-      <li><b>Free colour:</b> pick one of the six Championship games before they kick off. Pot it and you score its value. Miss it and your break ends.</li>
+      <li>Predict the red, the clearance and the tie-break before the red kicks off. You can't see each other's until then.</li>
+      <li><b>The red</b> is the first game. Right result = 1 point and your free colour counts.</li>
+      <li><b>Free colour:</b> pick ONE Championship game and predict it, any time before they kick off (before or after the red). Pot it and you score its value; miss it and your break ends. Your pick stays hidden from your opponent until those games start.</li>
       <li>Miss the red? No free colour, but you still play the clearance.</li>
       <li><b>Clearance:</b> yellow to black, in order. A miss ends your break.</li>
       <li>Right result = potted. Exact score = <b>double points</b>.</li>
@@ -521,19 +549,19 @@ function render() {
 function bind() {
   $app.querySelectorAll('[data-nav]').forEach((b) => (b.onclick = () => { S.view = b.dataset.nav; render(); window.scrollTo(0, 0); }));
   $app.querySelectorAll('[data-show]').forEach((b) => (b.onclick = () => { S.showPlayer = +b.dataset.show; render(); }));
-  $app.querySelectorAll('[data-free]').forEach((b) => (b.onclick = () => chooseFree(b.dataset.free)));
+  $app.querySelectorAll('[data-pick]').forEach((b) => (b.onclick = () => (b.dataset.pick ? pickFree(b.dataset.pick) : (S.draft.free = { colour: null, score: [null, null] }, render()))));
   $app.querySelectorAll('input[data-g]').forEach((inp) => (inp.oninput = () => {
-    const id = inp.dataset.g; const side = +inp.dataset.s;
-    const cur = S.draft.scores[id] ? S.draft.scores[id].slice() : [null, null];
+    const id = inp.dataset.g; const side = +inp.dataset.s; const isFree = !!inp.dataset.fr;
+    const src = isFree ? S.draft.free.score : S.draft.scores[id];
+    const cur = Array.isArray(src) ? src.slice() : [null, null];
     const n = parseInt(inp.value, 10);
     cur[side] = Number.isInteger(n) && n >= 0 ? Math.min(n, 20) : null;
-    S.draft.scores[id] = cur;
-    highlightOdds(id);
+    if (isFree) S.draft.free.score = cur; else S.draft.scores[id] = cur;
+    highlightOdds(id, cur);
     const btn = document.getElementById('save');
-    if (btn && !btn.disabled) {
-      const games = allGames(S.week);
-      const filled = games.filter((g) => Array.isArray(S.draft.scores[g.id]) && S.draft.scores[g.id].every(Number.isInteger)).length;
-      btn.textContent = `Save predictions (${filled}/${games.length})`;
+    if (btn && !btn.disabled && !redStarted()) {
+      const { filled, total } = filledCount();
+      btn.textContent = `Save predictions (${filled}/${total})`;
     }
   }));
   const save = document.getElementById('save'); if (save) save.onclick = savePreds;

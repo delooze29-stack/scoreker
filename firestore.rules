@@ -32,17 +32,20 @@ service cloud.firestore {
         && request.resource.data.freeLock is timestamp;
       allow update, delete: if false;
 
-      // Predictions: hidden from the other player until the red kicks off
+      // Main predictions (red, clearance, tie-break): hidden from the other player
+      // until the red kicks off, and locked from then on
       match /preds/{email} {
         allow read: if isPlayer() && (email == me() || request.time >= wk().redKickoff);
-        allow create, update: if isPlayer() && email == me() && (
-          request.time < wk().redKickoff
-          || (
-            request.time < wk().freeLock
-            && resource != null
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['freeChoice', 'updatedAt'])
-          )
-        );
+        allow create, update: if isPlayer() && email == me() && request.time < wk().redKickoff;
+        allow delete: if false;
+      }
+
+      // Free colour pick + its score: can be set or changed until the free-colour
+      // games kick off, and stays hidden from the other player until then
+      match /free/{email} {
+        allow read: if isPlayer() && (email == me() || request.time >= wk().freeLock);
+        allow create, update: if isPlayer() && email == me() && request.time < wk().freeLock
+          && request.resource.data.keys().hasOnly(['colour', 'gameId', 'score', 'updatedAt']);
         allow delete: if false;
       }
 
