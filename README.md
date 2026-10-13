@@ -20,7 +20,7 @@ Weekend football predictions for two players, played as a frame of snooker.
 ## Setup checklist
 
 1. **Odds key:** GitHub repo → Settings → Secrets and variables → Actions → secret `ODDS_API_KEY`.
-2. **Firebase:** create a project, Firestore database, enable Authentication → Google, add a Web app.
+2. **Firebase:** create a project, Firestore database, enable Authentication → Google and Email/Password, add a Web app.
    - Paste the web config into `js/config.js` and set both players' emails there.
    - Paste `firestore.rules` into Firestore → Rules (with the same two emails) and Publish.
    - Authentication → Settings → Authorised domains → add `delooze29-stack.github.io`.

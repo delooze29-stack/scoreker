@@ -143,3 +143,5 @@ nav.bottom button[aria-current="page"] { color: var(--amber); border-top-color: 
 .login p { margin: 0; color: var(--soft); max-width: 320px; line-height: 1.5; }
 .toast { position: fixed; left: 50%; bottom: calc(76px + env(safe-area-inset-bottom)); transform: translateX(-50%); background: #F5B700; color: #1A1300; font-weight: 700; padding: 10px 16px; border-radius: 999px; font-size: 14px; z-index: 10; box-shadow: 0 6px 20px rgba(0,0,0,.4); }
 .err { color: #FF8A80; font-size: 13px; }
+.field { min-height: 46px; border-radius: 8px; border: 1px solid #3A4D41; background: var(--card); color: var(--text); padding: 0 12px; font-size: 16px; }
+.field:focus { outline: 2px solid var(--amber); outline-offset: 1px; }

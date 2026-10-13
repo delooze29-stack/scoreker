@@ -1,7 +1,8 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
 import {
   getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult,
-  onAuthStateChanged, signOut,
+  onAuthStateChanged, signOut, createUserWithEmailAndPassword, signInWithEmailAndPassword,
+  sendEmailVerification, sendPasswordResetEmail,
 } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 import {
   getFirestore, doc, getDoc, setDoc, updateDoc, Timestamp, serverTimestamp,
@@ -190,15 +191,72 @@ async function chooseFree(colour) {
 }
 
 // ---------- views ----------
-function renderLogin(err) {
+function renderLogin(err, info) {
   $app.innerHTML = `
     <div class="login">
       <div class="brand">SCOREKER</div>
       <p>Weekend football predictions, played as a frame of snooker.</p>
-      <button class="primary" id="signin" style="max-width:300px">Sign in with Google</button>
+      <button class="primary" id="signin" style="max-width:320px">Sign in with Google</button>
+      <p class="small muted">or with your email</p>
+      <form id="pwform" class="pwform" style="width:100%;max-width:320px;display:flex;flex-direction:column;gap:8px">
+        <label class="small muted" for="em" style="text-align:left">Email</label>
+        <input id="em" type="email" autocomplete="email" required class="field">
+        <label class="small muted" for="pw" style="text-align:left">Password (6+ characters)</label>
+        <input id="pw" type="password" autocomplete="current-password" minlength="6" required class="field">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <button type="submit" class="primary" style="min-height:46px;font-size:15px">Sign in</button>
+          <button type="button" id="create" class="primary done" style="min-height:46px;font-size:15px">Create account</button>
+        </div>
+        <button type="button" id="forgot" class="linkbtn" style="align-self:center">Forgot password?</button>
+      </form>
       ${err ? `<p class="err">${esc(err)}</p>` : ''}
+      ${info ? `<p class="small" style="color:var(--good-text)">${esc(info)}</p>` : ''}
     </div>`;
   document.getElementById('signin').onclick = login;
+  const em = () => document.getElementById('em').value.trim();
+  const pw = () => document.getElementById('pw').value;
+  const nice = (e) => ({
+    'auth/invalid-credential': 'Wrong email or password.',
+    'auth/wrong-password': 'Wrong email or password.',
+    'auth/user-not-found': 'No account with that email yet — tap Create account.',
+    'auth/email-already-in-use': 'That email already has an account — tap Sign in.',
+    'auth/weak-password': 'Password needs at least 6 characters.',
+    'auth/invalid-email': 'That email address doesn\'t look right.',
+  }[e.code] || e.message);
+  document.getElementById('pwform').onsubmit = async (ev) => {
+    ev.preventDefault();
+    try { await signInWithEmailAndPassword(auth, em(), pw()); } catch (e) { renderLogin(nice(e)); }
+  };
+  document.getElementById('create').onclick = async () => {
+    if (!em() || pw().length < 6) { renderLogin('Enter your email and a password of 6+ characters first.'); return; }
+    if (playerIndex(em()) < 0) { renderLogin(`${em()} isn't one of the two players.`); return; }
+    try {
+      const cred = await createUserWithEmailAndPassword(auth, em(), pw());
+      await sendEmailVerification(cred.user);
+    } catch (e) { renderLogin(nice(e)); }
+  };
+  document.getElementById('forgot').onclick = async () => {
+    if (!em()) { renderLogin('Type your email first, then tap Forgot password.'); return; }
+    try { await sendPasswordResetEmail(auth, em()); renderLogin(null, `Reset link sent to ${em()}.`); } catch (e) { renderLogin(nice(e)); }
+  };
+}
+
+function renderVerify() {
+  $app.innerHTML = `
+    <div class="login">
+      <div class="brand">SCOREKER</div>
+      <p>Nearly there. We've sent a link to <b>${esc(S.user.email)}</b> — click it to confirm your email, then come back and tap Continue.</p>
+      <p class="small muted">Can't see it? Check your junk folder.</p>
+      <button class="primary" id="cont" style="max-width:320px">Continue</button>
+      <button class="linkbtn" id="resend">Send the link again</button>
+      <button class="linkbtn" id="out">Sign out</button>
+    </div>`;
+  document.getElementById('cont').onclick = async () => {
+    await S.user.reload();
+    if (S.user.emailVerified) { await S.user.getIdToken(true); start(S.user); } else toast('Not confirmed yet');
+  };
+  document.getElementById('resend').onclick = async () => { try { await sendEmailVerification(S.user); toast('Link sent'); } catch { toast('Try again in a minute'); } };
+  document.getElementById('out').onclick = () => signOut(auth);
 }
 
 function renderNotPlayer() {
@@ -429,7 +487,7 @@ function renderRules() {
 }
 
 function render() {
-  if (!S.user || S.me < 0) return;
+  if (!S.user || S.me < 0 || !S.user.emailVerified) return;
   const views = { frame: renderFrame, predict: renderPredict, season: renderSeason, rules: renderRules };
   $app.innerHTML = views[S.view]() + nav();
   bind();
@@ -465,16 +523,24 @@ async function refresh() {
 
 getRedirectResult(auth).catch((e) => console.warn(e));
 
-onAuthStateChanged(auth, async (user) => {
+function playerIndex(email) {
+  const e = (email || '').toLowerCase();
+  return PLAYERS.findIndex((p) => [p.email, ...(p.aliases || [])].map((x) => x.toLowerCase()).includes(e));
+}
+
+async function start(user) {
   S.user = user;
   if (!user) { renderLogin(); return; }
-  S.me = PLAYERS.findIndex((p) => p.email.toLowerCase() === (user.email || '').toLowerCase());
+  S.me = playerIndex(user.email);
   if (S.me < 0) { renderNotPlayer(); return; }
+  if (!user.emailVerified) { renderVerify(); return; }
   S.showPlayer = S.me;
   await refresh();
   loadSeason();
-});
+}
+
+onAuthStateChanged(auth, start);
 
 // Keep it fresh while the app is open
-setInterval(() => { if (S.user && S.me >= 0 && document.visibilityState === 'visible' && S.view === 'frame') refresh(); }, 120000);
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && S.user && S.me >= 0) refresh(); });
+setInterval(() => { if (S.user && S.me >= 0 && S.user.emailVerified && document.visibilityState === 'visible' && S.view === 'frame') refresh(); }, 120000);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && S.user && S.me >= 0 && S.user.emailVerified) refresh(); });

@@ -2,21 +2,23 @@ rules_version = '2';
 
 // ScoreKer Firestore rules.
 // Paste this whole file into Firebase console → Firestore Database → Rules → Publish.
-// Replace the two email addresses with yours (lower case, exactly as your Google accounts).
+// Players: Mathew (delooze29@googlemail.com, also @gmail.com) and Gaz (claytongary@sky.com).
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
     function players() {
-      return ['PLAYER1_EMAIL@gmail.com', 'PLAYER2_EMAIL@gmail.com'];
+      return ['delooze29@googlemail.com', 'delooze29@gmail.com', 'claytongary@sky.com'];
     }
     function isPlayer() {
       return request.auth != null
         && request.auth.token.email_verified == true
         && request.auth.token.email.lower() in players();
     }
+    // Each player's predictions are filed under their main address
     function me() {
-      return request.auth.token.email.lower();
+      let e = request.auth.token.email.lower();
+      return e == 'delooze29@gmail.com' ? 'delooze29@googlemail.com' : e;
     }
 
     match /weeks/{weekId} {

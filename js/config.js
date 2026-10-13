@@ -13,9 +13,10 @@ export const firebaseConfig = {
 
 // 2. The two players. Emails must match your Google accounts (and firestore.rules).
 //    Player 1 is shown on the left of the scoreboard.
+//    'aliases' are other addresses the same person might sign in with.
 export const PLAYERS = [
-  { email: 'PLAYER1_EMAIL@gmail.com', name: 'Player 1' },
-  { email: 'PLAYER2_EMAIL@gmail.com', name: 'Player 2' },
+  { email: 'delooze29@googlemail.com', name: 'Mathew', aliases: ['delooze29@gmail.com'] },
+  { email: 'claytongary@sky.com', name: 'Gaz', aliases: [] },
 ];
 
 // 3. Bonus frames for the season's highest break.
