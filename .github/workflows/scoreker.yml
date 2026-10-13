@@ -1,0 +1,69 @@
+name: ScoreKer weekly data
+
+on:
+  schedule:
+    # Times are UTC. UK is UTC+1 in summer, UTC+0 in winter.
+    - cron: '7 7 * * 5'          # Friday morning: pick the weekend's games
+    - cron: '35 22 * * 5'        # Friday night: results (Friday-night red)
+    - cron: '20 16,19,22 * * 6'  # Saturday: results x3
+    - cron: '20 16,19,22 * * 0'  # Sunday: results x3
+    - cron: '10 8 * * 1'         # Monday morning: mop-up results
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'select (pick games) or results (fetch scores)'
+        required: true
+        default: 'results'
+        type: choice
+        options: [results, select]
+      force:
+        description: 'Re-pick games even if this weekend is already picked'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: scoreker-data
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Work out mode
+        id: mode
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "mode=${{ inputs.mode }}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event.schedule }}" = "7 7 * * 5" ]; then
+            echo "mode=select" >> "$GITHUB_OUTPUT"
+          else
+            echo "mode=results" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run update
+        env:
+          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+          FORCE: ${{ inputs.force && '1' || '0' }}
+        run: node scripts/update.mjs ${{ steps.mode.outputs.mode }}
+
+      - name: Commit data changes
+        run: |
+          if [ -n "$(git status --porcelain data)" ]; then
+            git config user.name "scoreker-bot"
+            git config user.email "scoreker-bot@users.noreply.github.com"
+            git add data
+            git commit -m "Weekly data: ${{ steps.mode.outputs.mode }}"
+            git push
+          else
+            echo "No data changes."
+          fi

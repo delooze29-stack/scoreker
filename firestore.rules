@@ -1,0 +1,54 @@
+rules_version = '2';
+
+// ScoreKer Firestore rules.
+// Paste this whole file into Firebase console → Firestore Database → Rules → Publish.
+// Replace the two email addresses with yours (lower case, exactly as your Google accounts).
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function players() {
+      return ['PLAYER1_EMAIL@gmail.com', 'PLAYER2_EMAIL@gmail.com'];
+    }
+    function isPlayer() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email.lower() in players();
+    }
+    function me() {
+      return request.auth.token.email.lower();
+    }
+
+    match /weeks/{weekId} {
+      function wk() { return get(/databases/$(database)/documents/weeks/$(weekId)).data; }
+
+      // Lock times for the weekend, created once from the published fixtures
+      allow read: if isPlayer();
+      allow create: if isPlayer()
+        && request.resource.data.keys().hasOnly(['redKickoff', 'freeLock'])
+        && request.resource.data.redKickoff is timestamp
+        && request.resource.data.freeLock is timestamp;
+      allow update, delete: if false;
+
+      // Predictions: hidden from the other player until the red kicks off
+      match /preds/{email} {
+        allow read: if isPlayer() && (email == me() || request.time >= wk().redKickoff);
+        allow create, update: if isPlayer() && email == me() && (
+          request.time < wk().redKickoff
+          || (
+            request.time < wk().freeLock
+            && resource != null
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['freeChoice', 'updatedAt'])
+          )
+        );
+        allow delete: if false;
+      }
+
+      // "Locked in" flags, so each of you can see the other has entered (but not what)
+      match /status/{email} {
+        allow read: if isPlayer();
+        allow write: if isPlayer() && email == me();
+      }
+    }
+  }
+}
