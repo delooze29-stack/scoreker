@@ -409,15 +409,40 @@ function freePicker() {
 function predRow(g, label, locked) {
   const p = S.draft.scores[g.id] || [];
   const v = (x) => (Number.isInteger(x) ? x : '');
-  const o = g.odds || {};
-  const odds = o.home ? ` · H ${o.home} · D ${o.draw ?? '–'} · A ${o.away}` : '';
   return `<div class="pred-row">${dot(g.colour)}
-    <div style="min-width:0"><div class="fx">${esc(g.home)} v ${esc(g.away)}</div><div class="det">${label ? label + ' · ' : ''}${fmtKO(g.kickoff)}${odds}</div></div>
+    <div style="min-width:0"><div class="fx">${esc(g.home)} v ${esc(g.away)}</div><div class="det">${label ? label + ' · ' : ''}${fmtKO(g.kickoff)}</div></div>
     <div class="score">
       <input type="number" inputmode="numeric" min="0" max="20" data-g="${g.id}" data-s="0" value="${v(p[0])}" aria-label="${esc(g.home)} goals" placeholder="–" ${locked ? 'disabled' : ''}>
       <span class="muted" aria-hidden="true">–</span>
       <input type="number" inputmode="numeric" min="0" max="20" data-g="${g.id}" data-s="1" value="${v(p[1])}" aria-label="${esc(g.away)} goals" placeholder="–" ${locked ? 'disabled' : ''}>
-    </div></div>`;
+    </div>${oddsStrip(g, p)}</div>`;
+}
+
+// Bookmaker odds as UK fractions, e.g. 2.5 -> "6/4"
+const FRACS = [[1,10],[1,8],[1,7],[1,6],[1,5],[2,9],[1,4],[2,7],[3,10],[1,3],[4,11],[2,5],[4,9],[1,2],[8,15],[4,7],[8,13],[4,6],[8,11],[4,5],[5,6],[10,11],[1,1],[11,10],[6,5],[5,4],[11,8],[6,4],[13,8],[7,4],[15,8],[2,1],[9,4],[5,2],[11,4],[3,1],[10,3],[7,2],[4,1],[9,2],[5,1],[11,2],[6,1],[13,2],[7,1],[15,2],[8,1],[9,1],[10,1],[11,1],[12,1],[14,1],[16,1],[18,1],[20,1],[25,1],[33,1],[40,1],[50,1]];
+function frac(dec) {
+  if (!dec) return '–';
+  const x = dec - 1;
+  let best = FRACS[0];
+  for (const f of FRACS) if (Math.abs(f[0] / f[1] - x) < Math.abs(best[0] / best[1] - x)) best = f;
+  return best[0] === best[1] ? 'Evens' : `${best[0]}/${best[1]}`;
+}
+const pickOf = (p) => (Array.isArray(p) && Number.isInteger(p[0]) && Number.isInteger(p[1]) ? Math.sign(p[0] - p[1]) : null);
+
+function oddsStrip(g, p) {
+  const o = g.odds || {};
+  if (!o.home) return '';
+  const pick = pickOf(p);
+  const cell = (k, label, odds) => `<span class="odd ${pick === k ? 'on' : ''}" data-k="${k}"><span class="who">${esc(label)}</span><b>${frac(odds)}</b></span>`;
+  return `<div class="odds" data-odds="${g.id}" aria-label="Bookmaker odds">
+    ${cell(1, g.home, o.home)}${cell(0, 'Draw', o.draw)}${cell(-1, g.away, o.away)}</div>`;
+}
+
+function highlightOdds(id) {
+  const strip = $app.querySelector(`[data-odds="${CSS.escape(id)}"]`);
+  if (!strip) return;
+  const pick = pickOf(S.draft.scores[id]);
+  strip.querySelectorAll('.odd').forEach((el) => el.classList.toggle('on', pick === +el.dataset.k));
 }
 
 function renderPredict() {
@@ -503,6 +528,7 @@ function bind() {
     const n = parseInt(inp.value, 10);
     cur[side] = Number.isInteger(n) && n >= 0 ? Math.min(n, 20) : null;
     S.draft.scores[id] = cur;
+    highlightOdds(id);
     const btn = document.getElementById('save');
     if (btn && !btn.disabled) {
       const games = allGames(S.week);
