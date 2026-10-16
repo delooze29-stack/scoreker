@@ -10,7 +10,7 @@ window.KFL_FIREBASE={apiKey:'AIzaSyBMHK2OGUOUtAsRyw69NKut76RcmnrkeyU',authDomain
 window.KFL_COLLECTION='kfl_rounds';
 </script>
 <style>html,body{font-size:14px}</style>
-<title>Kingfisher Links</title>
+<title>Doughty's Links</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -159,6 +159,9 @@ select.pname option,select.pname optgroup{color:#111;background:#fff}
 .toprow .go.alt{width:auto;margin:0;font-size:14px;padding:8px 12px;white-space:nowrap}
 .cardBtns{display:flex;gap:8px;margin-top:8px}.cardBtns .go{margin:0;flex:1}
 body.driving .hud .bottom{visibility:hidden}
+.linkbtn{pointer-events:auto;background:none;border:0;padding:0;font:inherit;color:var(--gold);text-decoration:underline;cursor:pointer;letter-spacing:inherit;text-transform:inherit}
+.welcome h1{font-size:44px}.welcome .go{margin-top:4px}
+#replayBadge{position:fixed;left:max(16px, env(safe-area-inset-left, 0px));top:calc(env(safe-area-inset-top, 0px) + 150px);z-index:4;pointer-events:none;font:400 20px var(--display);letter-spacing:.12em;text-transform:uppercase;color:#fff;background:#c4161c;padding:6px 14px;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.35)}
 .wx{font-size:11px;font-weight:800;color:var(--muted);margin-top:2px}.wx.wet{color:#8fd3ff}
 #buggyUI{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom, 0px) + 18px);display:flex;gap:14px;align-items:center;z-index:3}
 #buggyUI button{pointer-events:auto;touch-action:none;width:74px;height:74px;border-radius:50%;border:3px solid rgba(255,255,255,.5);background:var(--panel);color:#fff;font:400 34px var(--display);cursor:pointer}
@@ -225,6 +228,7 @@ table.btab td.bmsg{font:600 16px var(--body);color:#0c5a32;padding:16px;height:a
       </div>
       <button class="small-btn" id="mute" type="button">Sound on</button>
       <button class="small-btn" id="quit" type="button">Quit round</button>
+      <button class="small-btn" id="replayBtn" type="button" hidden>Replay last shot</button>
       <button class="small-btn gv" id="gview" type="button" hidden>Green view</button>
     </div>
   </div>
@@ -245,6 +249,7 @@ table.btab td.bmsg{font:600 16px var(--body);color:#0c5a32;padding:16px;height:a
   </div>
 </div>
 <div id="turnPill" hidden></div>
+<div id="replayBadge" hidden>Replay</div>
 <div id="buggyUI" hidden><button id="bLeft" type="button" aria-label="Steer left">‹</button><button id="bSkip" type="button">Skip</button><button id="bRight" type="button" aria-label="Steer right">›</button></div>
 <div class="overlay" id="board" hidden><div class="boardWrap"><div class="board">
   <div class="bhead"><span>LEADERS</span></div>
@@ -255,10 +260,21 @@ table.btab td.bmsg{font:600 16px var(--body);color:#0c5a32;padding:16px;height:a
 
 <div id="toast"><div class="t1" id="t1"></div><div class="t2" id="t2"></div></div>
 
-<div class="overlay" id="intro">
+<div class="overlay" id="welcome">
+  <div class="card welcome">
+    <div class="eyebrow">Welcome to</div>
+    <h1>Doughty's Links</h1>
+    <p>Four courses, a driving range and a leaderboard for everyone who plays.</p>
+    <label class="eyebrow" for="pname">Your name</label>
+    <input id="pname" class="pname" type="text" maxlength="16" autocomplete="nickname" placeholder="Type your name">
+    <button class="go" id="wGo" type="button" disabled>Enter the clubhouse</button>
+  </div>
+</div>
+
+<div class="overlay" id="intro" hidden>
   <div class="card">
-    <div class="toprow"><div><div class="eyebrow">3D golf</div>
-    <h1>Kingfisher Links</h1></div><button class="go alt" id="openBoard" type="button">Leaderboard</button></div>
+    <div class="toprow"><div><div class="eyebrow">3D golf · playing as <span id="meName"></span> · <button class="linkbtn" id="changeName" type="button">change</button></div>
+    <h1>Doughty's Links</h1></div><button class="go alt" id="openBoard" type="button">Leaderboard</button></div>
     <ul>
       <li><b>Aim:</b> drag the ring, or swipe the course left and right. Swipe up and down to change distance.</li>
       <li><b>Power:</b> grab your ball and pull it down. Past 100% is extra power, but the green zone shrinks.</li>
@@ -267,8 +283,6 @@ table.btab td.bmsg{font:600 16px var(--body);color:#0c5a32;padding:16px;height:a
       <li><b>Green view:</b> on approach shots, tap Green view (or press G) for a close-up of the green. The yellow dots show how the ball should roll.</li>
       <li><b>Slopes and wind:</b> the ball rolls with the ground, so read the grid and drifting dots on the greens. The flag, trees and dust show the wind.</li>
     </ul>
-    <label class="eyebrow" for="pname">Your name</label>
-    <input id="pname" class="pname" type="text" maxlength="16" autocomplete="nickname" placeholder="Type your name">
     <div class="eyebrow">Your scores</div>
     <div class="scores" id="scores"></div>
     <div class="eyebrow">Mode</div>
@@ -302,13 +316,13 @@ table.btab td.bmsg{font:600 16px var(--body);color:#0c5a32;padding:16px;height:a
     <p id="cardSub"></p>
     <table><thead id="cardHead"></thead><tbody id="cardRows"></tbody></table>
     <button class="go" id="cardBtn" type="button">Next hole</button>
-    <div class="cardBtns"><button class="go alt" id="cardBoard" type="button" hidden>Leaderboard</button><button class="go alt" id="cardBtn2" type="button" hidden>Back to menu</button></div>
+    <div class="cardBtns"><button class="go alt" id="cardReplay" type="button" hidden>Replay</button><button class="go alt" id="cardBoard" type="button" hidden>Leaderboard</button><button class="go alt" id="cardBtn2" type="button" hidden>Back to menu</button></div>
   </div>
 </div>
 
 <div class="overlay" id="fail" hidden>
   <div class="card">
-    <div class="eyebrow">Kingfisher Links</div>
+    <div class="eyebrow">Doughty's Links</div>
     <h2>The course could not load</h2>
     <p id="failMsg"></p>
   </div>
@@ -427,8 +441,11 @@ const MASTER_DEFS=[{"name":"Opening Drive","par":4,"seed":101,"line":[[0.0,0.0],
 const RANGE_DEF={name:'Driving Range',par:4,seed:301,range:true,line:[[0,0],[0,170],[0,330]],pin:[0,330],fairways:[{pts:[[0,24],[0,170],[0,318]],hw:62}],
   green:{x:0,z:330,rx:16,rz:13,rot:0,raise:.6,tilt:[0,-.012],bumps:[]},bunkers:[],water:[],roughW:105,wind:[0,12],elev:[[0,1],[1,0]],hills:9,
   targets:[[-22,60,6,[.96,.82,.2]],[20,100,7,[.9,.25,.2]],[-18,150,8,[.3,.62,1]],[22,200,9,[.97,.97,.97]],[-12,250,10,[1,.55,.15]],[14,295,11,[.7,.53,1]]]};
-const COURSES={range:{name:'Driving Range',sub:'',defs:[RANGE_DEF],from:0,to:1,hidden:true},kf:{name:'Kingfisher Links',sub:'3 holes',defs:HOLE_DEFS,from:0,to:3},mf:{name:'The Master Course',sub:'Front 9',defs:MASTER_DEFS,from:0,to:9},
-  mb:{name:'The Master Course',sub:'Back 9',defs:MASTER_DEFS,from:9,to:18},m18:{name:'The Master Course',sub:'Full 18',defs:MASTER_DEFS,from:0,to:18}};
+const HEATHER_DEFS=[{"name":"First Light","par":4,"seed":501,"line":[[0.0,0.0],[1.4,395.3]],"pin":[1.4,395.3],"fairways":[{"pts":[[0.0,125.4],[0.0,131.5],[0.0,137.5],[0.0,143.5],[0.0,149.5],[0.0,155.5],[0.0,161.5],[0.0,167.5],[0.0,173.6],[0.0,179.6],[0.0,185.6],[0.0,191.6],[0.0,197.6],[0.0,203.6],[0.0,209.6],[0.0,215.7],[0.0,221.7],[0.0,227.7],[0.0,233.7],[0.0,239.7],[0.0,245.7],[0.0,251.7],[0.0,257.7],[0.0,263.8],[0.0,269.8],[0.0,275.8],[0.0,281.8],[0.0,287.8],[0.0,293.8],[0.0,299.8],[0.0,305.9],[0.0,311.9],[0.0,317.9],[0.0,323.9],[0.0,329.9],[0.0,335.9],[0.0,341.9],[0.0,348.0],[0.0,354.0],[0.0,360.0],[0.0,366.0]],"hw":22}],"green":{"x":0.0,"z":392.0,"rx":15,"rz":16,"rot":-0.0,"raise":0.84,"tilt":[0.015,-0.002],"bumps":[[0.0,4.3,0.16,2.9],[-5.2,5.9,0.18,2.5]]},"bunkers":[{"x":20.0,"z":243.0,"rx":9,"rz":6,"rot":0.23},{"x":-24.0,"z":258.7,"rx":8,"rz":5,"rot":-0.24},{"x":-19.0,"z":377.2,"rx":6,"rz":4,"rot":0.54}],"water":[],"roughW":52,"wind":[3,15],"elev":[[0,4],[0.5,0],[1,2]],"hills":13},{"name":"Mirror Pond","par":3,"seed":508,"line":[[0.0,0.0],[-4.1,169.2]],"pin":[-4.1,169.2],"fairways":[],"green":{"x":0.0,"z":168.0,"rx":14,"rz":13,"rot":-0.0,"raise":0.86,"tilt":[0.015,0.004],"bumps":[[-0.2,-1.4,0.17,2.9],[-1.3,0.2,-0.13,2.7]]},"bunkers":[{"x":20.3,"z":177.5,"rx":5,"rz":4,"rot":-0.21}],"water":[{"x":0.0,"z":104.2,"rx":30,"rz":16,"rot":-0.0}],"roughW":52,"wind":[3,15],"elev":[[0,6],[1,0]],"hills":13},{"name":"Heather Sweep","par":5,"seed":515,"line":[[0.0,0.0],[0.0,290.4],[-98.2,509.2]],"pin":[-98.2,509.2],"fairways":[{"pts":[[0.0,140.0],[0.0,149.1],[0.0,158.1],[0.0,167.2],[0.0,176.2],[0.0,185.2],[0.0,194.3],[0.0,203.3],[0.0,212.4],[0.0,221.4],[0.0,230.5],[0.0,239.6],[0.0,248.6],[0.0,257.6],[0.0,266.7],[0.0,275.8],[0.0,284.8],[-1.4,293.6],[-5.1,301.8],[-8.8,310.1],[-12.4,318.4],[-16.1,326.6],[-19.8,334.9],[-23.5,343.2],[-27.2,351.4],[-30.8,359.7],[-34.5,368.0],[-38.2,376.2],[-41.9,384.5],[-45.6,392.8],[-49.2,401.0],[-52.9,409.3],[-56.6,417.6],[-60.3,425.8],[-63.9,434.1],[-67.6,442.4],[-71.3,450.7],[-75.0,458.9],[-78.7,467.2],[-82.3,475.5],[-86.0,483.7]],"hw":24}],"green":{"x":-96.6,"z":507.5,"rx":15,"rz":16,"rot":0.419,"raise":1.14,"tilt":[-0.016,0.001],"bumps":[[4.5,4.0,0.15,3.7],[-0.8,-1.8,-0.19,2.7]]},"bunkers":[{"x":-22.0,"z":264.0,"rx":9,"rz":6,"rot":0.2},{"x":-73.4,"z":494.7,"rx":6,"rz":5,"rot":-0.21}],"water":[{"x":40.0,"z":221.8,"rx":20,"rz":40,"rot":1.571}],"roughW":52,"wind":[3,15],"elev":[[0,0],[0.5,4],[1,2]],"hills":13},{"name":"Gorse Corner","par":4,"seed":522,"line":[[0.0,0.0],[0.0,241.9],[69.1,419.3]],"pin":[69.1,419.3],"fairways":[{"pts":[[0.0,138.2],[0.0,144.9],[0.0,151.6],[0.0,158.3],[0.0,165.0],[0.0,171.7],[0.0,178.4],[0.0,185.1],[0.0,191.8],[0.0,198.5],[0.0,205.2],[0.0,211.9],[0.0,218.6],[0.0,225.3],[0.0,232.0],[0.0,238.6],[1.2,245.1],[3.6,251.4],[6.0,257.6],[8.4,263.9],[10.8,270.1],[13.2,276.4],[15.6,282.6],[18.0,288.9],[20.4,295.1],[22.8,301.4],[25.2,307.6],[27.6,313.9],[30.0,320.1],[32.4,326.4],[34.8,332.6],[37.2,338.9],[39.6,345.1],[42.0,351.4],[44.4,357.6],[46.8,363.9],[49.2,370.1],[51.6,376.4],[54.0,382.6],[56.4,388.9],[58.8,395.1]],"hw":22}],"green":{"x":68.1,"z":419.4,"rx":15,"rz":16,"rot":-0.366,"raise":0.77,"tilt":[0.013,-0.023],"bumps":[[-2.3,1.1,-0.22,3.2],[-4.8,-2.9,-0.19,3.1]]},"bunkers":[{"x":-24.3,"z":251.2,"rx":9,"rz":6,"rot":-0.09},{"x":28.6,"z":249.5,"rx":8,"rz":6,"rot":-0.33},{"x":47.3,"z":404.2,"rx":6,"rz":4,"rot":0.29}],"water":[],"roughW":52,"wind":[3,15],"elev":[[0,2],[0.6,-1],[1,3]],"hills":13},{"name":"Long Carry","par":3,"seed":529,"line":[[0.0,0.0],[-2.8,205.7]],"pin":[-2.8,205.7],"fairways":[],"green":{"x":0.0,"z":204.0,"rx":14,"rz":13,"rot":-0.0,"raise":0.93,"tilt":[-0.019,0.006],"bumps":[[3.9,3.5,-0.13,2.7],[3.9,-4.1,0.2,3.9]]},"bunkers":[{"x":-21.3,"z":195.1,"rx":6,"rz":4,"rot":0.07},{"x":21.3,"z":195.1,"rx":6,"rz":4,"rot":0.37},{"x":0.0,"z":229.2,"rx":9,"rz":3,"rot":0.5}],"water":[],"roughW":52,"wind":[3,15],"elev":[[0,8],[1,2]],"hills":13},{"name":"Reed Bank","par":4,"seed":536,"line":[[0.0,0.0],[-0.5,361.6]],"pin":[-0.5,361.6],"fairways":[{"pts":[[0.0,116.8],[0.0,122.4],[0.0,127.9],[0.0,133.5],[0.0,139.0],[0.0,144.6],[0.0,150.1],[0.0,155.7],[0.0,161.2],[0.0,166.8],[0.0,172.3],[0.0,177.9],[0.0,183.5],[0.0,189.0],[0.0,194.6],[0.0,200.1],[0.0,205.7],[0.0,211.2],[0.0,216.8],[0.0,222.3],[0.0,227.9],[0.0,233.5],[0.0,239.0],[0.0,244.6],[0.0,250.1],[0.0,255.7],[0.0,261.2],[0.0,266.8],[0.0,272.3],[0.0,277.9],[0.0,283.4],[0.0,289.0],[0.0,294.6],[0.0,300.1],[0.0,305.7],[0.0,311.2],[0.0,316.8],[0.0,322.3],[0.0,327.9],[0.0,333.4],[0.0,339.0]],"hw":22}],"green":{"x":0.0,"z":365.0,"rx":15,"rz":16,"rot":-0.0,"raise":0.86,"tilt":[-0.009,0.001],"bumps":[[-0.3,-2.3,-0.16,3.5],[-2.7,-3.7,0.18,2.8]]},"bunkers":[{"x":24.0,"z":211.7,"rx":8,"rz":5,"rot":-0.14}],"water":[{"x":-24.0,"z":328.5,"rx":10,"rz":22,"rot":1.571}],"roughW":52,"wind":[3,15],"elev":[[0,0],[1,-2]],"hills":13},{"name":"Brook Run","par":5,"seed":543,"line":[[0.0,0.0],[0.0,263.0],[89.8,530.2]],"pin":[89.8,530.2],"fairways":[{"pts":[[0.0,140.0],[0.0,149.6],[0.0,159.1],[0.0,168.7],[0.0,178.2],[0.0,187.8],[0.0,197.3],[0.0,206.8],[0.0,216.4],[0.0,225.9],[0.0,235.5],[0.0,245.1],[0.0,254.6],[0.4,264.1],[3.3,273.2],[6.3,282.3],[9.2,291.3],[12.2,300.4],[15.1,309.5],[18.1,318.6],[21.0,327.7],[24.0,336.8],[26.9,345.8],[29.9,354.9],[32.8,364.0],[35.8,373.1],[38.7,382.2],[41.7,391.2],[44.6,400.3],[47.6,409.4],[50.5,418.5],[53.5,427.6],[56.4,436.7],[59.4,445.7],[62.3,454.8],[65.3,463.9],[68.2,473.0],[71.2,482.1],[74.1,491.2],[77.1,500.2],[80.0,509.3]],"hw":24}],"green":{"x":88.1,"z":534.0,"rx":15,"rz":16,"rot":-0.314,"raise":0.97,"tilt":[0.003,0.026],"bumps":[[-1.7,-3.9,-0.13,2.6],[2.5,-3.0,-0.14,4.1]]},"bunkers":[{"x":-26.0,"z":246.6,"rx":9,"rz":6,"rot":0.43},{"x":98.5,"z":511.1,"rx":6,"rz":4,"rot":-0.46}],"water":[{"x":37.3,"z":377.7,"rx":34,"rz":5,"rot":-0.314}],"roughW":52,"wind":[3,15],"elev":[[0,3],[0.5,0],[1,4]],"hills":13},{"name":"Island Pin","par":3,"seed":550,"line":[[0.0,0.0],[1.0,148.9]],"pin":[1.0,148.9],"fairways":[],"green":{"x":0.0,"z":146.0,"rx":14,"rz":13,"rot":-0.0,"raise":0.89,"tilt":[0.002,-0.001],"bumps":[[3.3,-5.0,-0.2,3.5],[-2.0,3.1,-0.16,4.1]]},"bunkers":[{"x":-16.8,"z":159.8,"rx":5,"rz":3,"rot":0.35}],"water":[{"x":0.0,"z":101.9,"rx":28,"rz":14,"rot":-0.0},{"x":36.0,"z":150.3,"rx":10,"rz":18,"rot":1.571}],"roughW":52,"wind":[3,15],"elev":[[0,3],[1,0]],"hills":13},{"name":"Ridge Home","par":4,"seed":557,"line":[[0.0,0.0],[0.0,222.0],[-43.0,437.0]],"pin":[-43.0,437.0],"fairways":[{"pts":[[0.0,140.0],[0.0,146.9],[0.0,153.9],[0.0,160.8],[0.0,167.8],[0.0,174.8],[0.0,181.7],[0.0,188.7],[0.0,195.6],[0.0,202.6],[0.0,209.5],[0.0,216.4],[-0.3,223.4],[-1.7,230.2],[-3.2,237.0],[-4.6,243.8],[-6.1,250.6],[-7.5,257.4],[-9.0,264.2],[-10.4,271.0],[-11.9,277.8],[-13.3,284.5],[-14.8,291.3],[-16.2,298.1],[-17.7,304.9],[-19.1,311.7],[-20.5,318.5],[-22.0,325.3],[-23.4,332.1],[-24.9,338.9],[-26.3,345.7],[-27.8,352.5],[-29.2,359.3],[-30.7,366.1],[-32.1,372.9],[-33.6,379.7],[-35.0,386.5],[-36.5,393.3],[-37.9,400.1],[-39.3,406.9],[-40.8,413.7]],"hw":22}],"green":{"x":-46.2,"z":439.1,"rx":15,"rz":16,"rot":0.21,"raise":1.0,"tilt":[-0.02,-0.004],"bumps":[[0.1,2.7,0.14,3.9],[-5.9,6.1,0.15,3.5]]},"bunkers":[{"x":16.9,"z":248.3,"rx":9,"rz":6,"rot":0.5},{"x":-56.3,"z":414.3,"rx":6,"rz":4,"rot":0.23},{"x":-26.9,"z":420.5,"rx":6,"rz":4,"rot":-0.46}],"water":[],"roughW":52,"wind":[3,15],"elev":[[0,0],[0.6,5],[1,9]],"hills":13}];
+const WREN_DEFS=[{"name":"Starter","par":3,"seed":601,"line":[[0.0,0.0],[2.1,69.8]],"pin":[2.1,69.8],"fairways":[],"green":{"x":0.0,"z":72.0,"rx":9,"rz":8,"rot":-0.0,"raise":0.47,"tilt":[-0.017,-0.017],"bumps":[[1.7,-2.9,0.22,3.6],[-1.7,1.5,0.16,3.1]]},"bunkers":[{"x":10.1,"z":82.7,"rx":3,"rz":2,"rot":0.01}],"water":[],"roughW":30,"wind":[2,10],"elev":[[0,1],[1,0]],"hills":8},{"name":"Over the Pond","par":3,"seed":606,"line":[[0.0,0.0],[2.1,97.6]],"pin":[2.1,97.6],"fairways":[],"green":{"x":0.0,"z":96.0,"rx":9,"rz":8,"rot":-0.0,"raise":0.67,"tilt":[-0.017,0.025],"bumps":[[-0.9,-1.3,0.2,3.2],[-1.4,-0.9,-0.13,2.6]]},"bunkers":[],"water":[{"x":0.0,"z":52.8,"rx":18,"rz":9,"rot":-0.0}],"roughW":30,"wind":[2,10],"elev":[[0,2],[1,0]],"hills":8},{"name":"Tiny Tim","par":3,"seed":611,"line":[[0.0,0.0],[-0.7,55.0]],"pin":[-0.7,55.0],"fairways":[],"green":{"x":0.0,"z":55.0,"rx":9,"rz":8,"rot":-0.0,"raise":0.54,"tilt":[0.015,-0.021],"bumps":[[3.5,-0.1,0.2,3.7],[3.4,-2.1,0.15,2.9]]},"bunkers":[{"x":-9.8,"z":65.5,"rx":3,"rz":2,"rot":0.59},{"x":9.8,"z":65.5,"rx":3,"rz":2,"rot":0.53}],"water":[],"roughW":30,"wind":[2,10],"elev":[[0,0],[1,1]],"hills":8},{"name":"Uphill Pitch","par":3,"seed":616,"line":[[0.0,0.0],[-2.3,117.3]],"pin":[-2.3,117.3],"fairways":[],"green":{"x":0.0,"z":118.0,"rx":9,"rz":8,"rot":-0.0,"raise":0.64,"tilt":[0.004,-0.025],"bumps":[[1.7,-0.9,0.18,3.9],[1.6,1.8,-0.15,3.5]]},"bunkers":[{"x":-11.1,"z":106.5,"rx":4,"rz":3,"rot":0.13}],"water":[],"roughW":30,"wind":[2,10],"elev":[[0,0],[1,6]],"hills":8},{"name":"Saucer","par":3,"seed":621,"line":[[0.0,0.0],[-1.3,81.8]],"pin":[-1.3,81.8],"fairways":[],"green":{"x":0.0,"z":84.0,"rx":9,"rz":8,"rot":-0.0,"raise":0.75,"tilt":[0.001,0.019],"bumps":[[0.5,2.6,-0.21,3.6],[0.7,-0.4,0.16,3.4]]},"bunkers":[{"x":-10.1,"z":94.5,"rx":3,"rz":3,"rot":-0.51},{"x":10.1,"z":94.5,"rx":3,"rz":3,"rot":0.28},{"x":0.0,"z":100.3,"rx":5,"rz":2,"rot":0.47}],"water":[],"roughW":30,"wind":[2,10],"elev":[[0,3],[1,1]],"hills":8},{"name":"The Long One","par":3,"seed":626,"line":[[0.0,0.0],[-2.1,133.4]],"pin":[-2.1,133.4],"fairways":[],"green":{"x":0.0,"z":135.0,"rx":9,"rz":8,"rot":-0.0,"raise":0.41,"tilt":[0.02,-0.003],"bumps":[[1.7,0.5,-0.18,3.7],[0.8,-2.1,0.19,2.9]]},"bunkers":[{"x":10.2,"z":147.4,"rx":4,"rz":3,"rot":-0.29}],"water":[{"x":-14.0,"z":101.2,"rx":8,"rz":14,"rot":1.571}],"roughW":30,"wind":[2,10],"elev":[[0,6],[1,0]],"hills":8},{"name":"Chip Shot","par":3,"seed":631,"line":[[0.0,0.0],[-1.4,64.7]],"pin":[-1.4,64.7],"fairways":[],"green":{"x":0.0,"z":63.0,"rx":9,"rz":8,"rot":-0.0,"raise":0.62,"tilt":[-0.009,-0.009],"bumps":[[-1.9,3.1,0.15,3.6],[2.6,-0.6,-0.21,3.8]]},"bunkers":[{"x":0.0,"z":45.7,"rx":6,"rz":2,"rot":-0.36}],"water":[],"roughW":30,"wind":[2,10],"elev":[[0,1],[1,2]],"hills":8},{"name":"Moat","par":3,"seed":636,"line":[[0.0,0.0],[1.6,104.6]],"pin":[1.6,104.6],"fairways":[],"green":{"x":0.0,"z":105.0,"rx":9,"rz":8,"rot":-0.0,"raise":0.46,"tilt":[0.017,0.011],"bumps":[[2.9,-1.0,0.19,3.9],[-1.0,-1.6,-0.2,4.2]]},"bunkers":[],"water":[{"x":0.0,"z":78.2,"rx":16,"rz":5,"rot":-0.0},{"x":0.0,"z":131.9,"rx":16,"rz":5,"rot":-0.0}],"roughW":30,"wind":[2,10],"elev":[[0,2],[1,1]],"hills":8},{"name":"Last Orders","par":3,"seed":641,"line":[[0.0,0.0],[-2.4,91.1]],"pin":[-2.4,91.1],"fairways":[],"green":{"x":0.0,"z":90.0,"rx":9,"rz":8,"rot":-0.0,"raise":0.65,"tilt":[-0.012,-0.016],"bumps":[[1.5,-2.4,-0.17,4.1],[2.6,0.7,-0.12,3.6]]},"bunkers":[{"x":-10.8,"z":101.8,"rx":4,"rz":3,"rot":0.17},{"x":9.6,"z":101.6,"rx":3,"rz":3,"rot":-0.56}],"water":[],"roughW":30,"wind":[2,10],"elev":[[0,0],[1,3]],"hills":8}];
+const COURSES={range:{name:'Driving Range',sub:'',tab:'Range',defs:[RANGE_DEF],from:0,to:1,hidden:true},kf:{name:'Kingfisher Links',sub:'3 holes',tab:'Kingfisher',defs:HOLE_DEFS,from:0,to:3},mf:{name:'The Master Course',sub:'Front 9',tab:'Master front 9',defs:MASTER_DEFS,from:0,to:9},
+  mb:{name:'The Master Course',sub:'Back 9',tab:'Master back 9',defs:MASTER_DEFS,from:9,to:18},m18:{name:'The Master Course',sub:'Full 18',tab:'Master 18',defs:MASTER_DEFS,from:0,to:18},
+  hr:{name:'Heather Ridge',sub:'9 holes',tab:'Heather Ridge',defs:HEATHER_DEFS,from:0,to:9},pp:{name:'Little Wren',sub:'Pitch and putt · 9 holes',tab:'Pitch and putt',defs:WREN_DEFS,from:0,to:9}};
 const BUILT=new Map();function holesFor(k){const c=COURSES[k];if(!BUILT.has(c.defs))BUILT.set(c.defs,c.defs.map(buildHole));return BUILT.get(c.defs).slice(c.from,c.to)}
 let courseKey='kf',playKey='kf';try{const k=localStorage.getItem('kfl-course');if(COURSES[k])courseKey=k}catch(e){}
 let HOLES=holesFor('kf');
@@ -477,7 +494,7 @@ function prepHole(h){
   {const rr=rngFrom(h.seed*41+9),L=h.dense,g=h.green;h.mounds=[];h.bumps2=[];
     for(let i=0;i<26;i++){const k=Math.floor((.06+rr()*.86)*(L.length-1)),p=L[k],q=L[Math.min(L.length-1,k+1)],t=norm(q[0]-p[0]+1e-6,q[1]-p[1]),side=(rr()*2-1),lat=side*h.roughW*.95,x=p[0]-t[1]*lat,z=p[1]+t[0]*lat;
       if(hyp(x-g.x,z-g.z)<Math.max(g.rx,g.rz)+14||h.bunkers.some(b=>hyp(x-b.x,z-b.z)<Math.max(b.rx,b.rz)+6)||h.water.some(w=>hyp(x-w.x,z-w.z)<Math.max(w.rx,w.rz)+10))continue;
-      const inF=Math.abs(lat)<h.roughW*.38;h.mounds.push({x,z,a:inF?.7+rr()*.9:1.2+rr()*2.2,r:inF?9+rr()*10:7+rr()*9})}
+      const inF=Math.abs(lat)<h.roughW*.38;const ms=Math.min(1,h.lineLen/280);h.mounds.push({x,z,a:(inF?.7+rr()*.9:1.2+rr()*2.2)*ms,r:inF?9+rr()*10:7+rr()*9})}
     for(let i=0;i<2;i++){const a=rr()*Math.PI*2,k=.25+rr()*.4;h.bumps2.push([Math.cos(a)*g.rx*k,Math.sin(a)*g.rz*k,(rr()<.5?-1:1)*(.2+rr()*.15),3.6+rr()*1.6])}
     const ta=rr()*Math.PI*2;h.tier={h:h.seed===23?.18:.28,w:7,c:Math.cos(ta),s:Math.sin(ta),o:(rr()-.5)*4}}
   h.greenH=h.elevF(lineInfo(h,h.green.x,h.green.z)[1])+h.green.raise;
@@ -575,7 +592,7 @@ uniform int uClipOn,uHoleOn;uniform vec4 uClip;uniform vec3 uHole;uniform vec3 u
 uniform sampler2D uMap;uniform sampler2DShadow uShadow;out vec4 o;
 float shade(){if(uShadowOn==0)return 1.;vec3 s=vS.xyz/vS.w*.5+.5;if(s.x<0.||s.x>1.||s.y<0.||s.y>1.||s.z>1.)return 1.;float b=uSB,r=0.;vec2 t=vec2(uTexel);
  r+=texture(uShadow,vec3(s.xy+vec2(-.7,-.7)*t,s.z-b));r+=texture(uShadow,vec3(s.xy+vec2(.7,-.7)*t,s.z-b));r+=texture(uShadow,vec3(s.xy+vec2(-.7,.7)*t,s.z-b));r+=texture(uShadow,vec3(s.xy+vec2(.7,.7)*t,s.z-b));return r*.25;}
-void main(){if(uHoleOn==1&&distance(vW.xz,uHole.xy)<uHole.z)discard;vec3 base=uColor*vC;if(uTex==1)base*=texture(uMap,vUV).rgb;float a=uAlpha*vA;vec3 col;
+void main(){if(uHoleOn==1&&distance(vW.xz,uHole.xy)<uHole.z)discard;vec3 base=uColor*vC;if(uTex==1)base*=texture(uMap,vUV).rgb;if(uHoleOn==1){float hd=distance(vW.xz,uHole.xy)-uHole.z;if(hd<.014)base=vec3(.9,.9,.86)*vC;else if(hd<.07)base*=mix(.86,1.,hd/.07);}float a=uAlpha*vA;vec3 col;
  if(uMode==1){col=base;}else{vec3 n=normalize(vN);
   if(uMode==2){float t=uTime;n=normalize(vec3(sin(vW.x*1.7+t*1.3)*.05+sin(vW.z*2.3-t*1.1)*.04+sin((vW.x+vW.z)*4.1+t*2.)*.025,1.,cos(vW.z*1.9+t)*.05+cos(vW.x*2.9-t*1.5)*.04));}
   float d=max(dot(n,uSunDir),0.);float sh=shade();vec3 hemi=mix(uGnd,uSky,n.y*.5+.5);col=base*(hemi+uSunCol*d*sh);
@@ -803,11 +820,12 @@ function posePeople(t){
 function buildPin(h){
   const px=h.pin[0],pz=h.pin[1],py=hAtT(h.T,px,pz),[gx,gz]=grad(px,pz),n=nrm3([-gx,1,-gz]),t1=nrm3(cross(n,[0,0,1])),t2=cross(t1,n);
   R.hole=[px,pz,CUP_R];const CD=.2;
-  const wg=gCyl(28,1,1,false);for(let i=0;i<wg.col.length/4;i++){const v=i%2?.55:.1;wg.col[i*4]=v;wg.col[i*4+1]=v*.95;wg.col[i*4+2]=v*.8}
-  const walls=addH(mkMesh(wg,{mode:1,color:[.62,.55,.42]}));matTRS(walls.model,0,px,py-CD,pz,0,0,CUP_R,CD+.012,CUP_R);
-  const liner=addH(mkMesh(gCyl(28,1,1,false),{mode:1,color:[.95,.95,.95]}));matTRS(liner.model,0,px,py-.035,pz,0,0,CUP_R*.998,.047,CUP_R*.998);
-  const bot=addH(mkMesh(gDisc(28),{mode:1,color:[.07,.06,.05]}));matTRS(bot.model,0,px,py-CD+.002,pz,0,0,CUP_R,1,CUP_R);
-  const lin=addH(mkMesh(gRing(28,CUP_R/(CUP_R+.012)),{mode:1,color:[.96,.96,.96]}));matBasis(lin.model,t1,n,t2,CUP_R+.012,1,CUP_R+.012,[px,py+.012,pz]);
+  const N=40,band=(r,yTop,yBot,cTop,cBot)=>{const P=[],C=[],I=[];for(let i=0;i<=N;i++){const a=i/N*6.2832,x=px+Math.cos(a)*r,z=pz+Math.sin(a)*r;P.push(x,yTop(x,z),z,x,yBot(x,z),z);C.push(...cTop,1,...cBot,1)}
+    for(let i=0;i<N;i++){const k=i*2;I.push(k,k+1,k+2,k+1,k+3,k+2)}return geo(new Float32Array(P),null,new Uint16Array(I),new Float32Array(C))};
+  const gT=(x,z)=>hAtT(h.T,x,z);
+  addH(mkMesh(band(CUP_R*.999,(x,z)=>gT(x,z)-.003,(x,z)=>gT(x,z)-.04,[.97,.97,.95],[.86,.86,.84]),{mode:1}));
+  addH(mkMesh(band(CUP_R*.999,(x,z)=>gT(x,z)-.04,()=>py-CD,[.42,.36,.27],[.13,.11,.08]),{mode:1}));
+  const bot=addH(mkMesh(gDisc(28),{mode:1,color:[.1,.085,.06]}));matTRS(bot.model,0,px,py-CD,pz,0,0,CUP_R,1,CUP_R);
   const pole=addH(mkMesh(gCyl(8,1,1,true),{color:[.97,.97,.97],cast:true}));matTRS(pole.model,0,px,py-CD,pz,0,0,.022,2.4+CD,.022);
   const fx=14,fy=5,P=[],I=[];for(let j=0;j<=fy;j++)for(let i=0;i<=fx;i++)P.push(i/fx*.85,(j/fy-.5)*.55,0);for(let j=0;j<fy;j++)for(let i=0;i<fx;i++){const a=j*(fx+1)+i,b=a+fx+1;I.push(a,a+1,b,a+1,b+1,b)}
   const base=new Float32Array(P),fg=geo(new Float32Array(P),null,new Uint16Array(I));
@@ -870,7 +888,7 @@ function poseBuggy(b,kit){const M=buggyM,g=grad(b.x,b.z),up=nrm3([-g[0],1,-g[1]]
   matSeg(M.steer.model,L([-.3,1.18,.32]),L([-.3,1.23,.38]),.17);M.drv.color=kit.shirt;M.dcap.color=kit.cap}
 function setGolferKit(k){if(golferM.kit===k)return;golferM.kit=k;const P=golferM.parts;P.torso.color=k.shirt;P.uArmL.color=k.shirt;P.uArmR.color=k.shirt;['thighL','thighR','shinL','shinR','pelvis'].forEach(n=>P[n].color=k.legs);P.cap.color=k.cap;P.brim.color=k.cap}
 function showGolfer(v){for(const k in golferM.parts)golferM.parts[k].visible=v}
-function golfBodyLat(ci){const putt=CLUBS[ci].putt,cl=CLEN[ci],armR=putt?.46:.62,Hs=putt?.82:1.34,Rr=armR+cl;return -Math.sqrt(Math.max(.1,Rr*Rr-Hs*Hs))-.24}
+function golfBodyLat(ci){const putt=CLUBS[ci].putt,cl=CLEN[ci],armR=putt?.46:.62,Hs=putt?.96:1.34,Rr=armR+cl;return -Math.sqrt(Math.max(.1,Rr*Rr-Hs*Hs))-(putt?.17:.24)}
 function poseReact(st,kind,t){
   const P=golferM.parts,[dx,dz]=st.dir,Rx=dz,Rz=-dx,zc=golfBodyLat(st.ci);
   const LW=a=>[st.x+dx*a[0]+Rx*a[2],st.y+a[1],st.z+dz*a[0]+Rz*a[2]],LD=a=>[dx*a[0]+Rx*a[2],a[1],dz*a[0]+Rz*a[2]];
@@ -895,17 +913,17 @@ function poseReact(st,kind,t){
 function poseGolfer(st){
   const P=golferM.parts,[dx,dz]=st.dir,Rx=dz,Rz=-dx;
   const LW=a=>[st.x+dx*a[0]+Rx*a[2],st.y+a[1],st.z+dz*a[0]+Rz*a[2]],LD=a=>[dx*a[0]+Rx*a[2],a[1],dz*a[0]+Rz*a[2]];
-  const ci=st.ci,putt=CLUBS[ci].putt,cl=CLEN[ci],armR=putt?.46:.62,Hs=putt?.82:1.34,Rr=armR+cl,Sz=-Math.sqrt(Math.max(.1,Rr*Rr-Hs*Hs));
+  const ci=st.ci,putt=CLUBS[ci].putt,cl=CLEN[ci],armR=putt?.46:.62,Hs=putt?.96:1.34,Rr=armR+cl,Sz=-Math.sqrt(Math.max(.1,Rr*Rr-Hs*Hs));
   const S=[0,Hs,Sz],v=[0,-Hs,-Sz],vl=Math.hypot(v[0],v[1],v[2]),vh=v.map(a=>a/vl),n=nrm3([0,-v[2],v[1]]);
   const rot=(a,g)=>{const c=Math.cos(g),s=Math.sin(g),cr=cross(n,a),d=n[0]*a[0]+n[1]*a[1]+n[2]*a[2];return[0,1,2].map(i=>a[i]*c+cr[i]*s+n[i]*d*(1-c))};
   const s=st.s;let pa,pw;if(putt){pa=-s*.34;pw=0}else if(s<0){const k=-s;pa=1.95*k;pw=1.55*smooth(.12,.85,k)}else{pa=-2.3*s;pw=-1.5*smooth(.08,.7,s)}
   const hd=rot(vh,pa),cd=rot(vh,pa+pw),hands=[S[0]+hd[0]*armR,S[1]+hd[1]*armR,S[2]+hd[2]*armR],head=[hands[0]+cd[0]*cl,hands[1]+cd[1]*cl,hands[2]+cd[2]*cl];
   const yaw=putt?pa*.25:clamp(pa*.78,-1.75,1.5),sw=.2;
   const lead=[S[0]+Math.cos(yaw)*sw,S[1]-(putt?0:.05*Math.sin(yaw)),S[2]+Math.sin(yaw)*sw],trail=[S[0]-Math.cos(yaw)*sw,S[1]+(putt?0:.05*Math.sin(yaw)),S[2]-Math.sin(yaw)*sw];
-  const fol=Math.max(0,s),hy=yaw*.45,Hc=[putt?0:.07*fol,putt?.66:.93,Sz-(putt?.3:.24)];
+  const fol=Math.max(0,s),hy=yaw*.45,Hc=[putt?0:.07*fol,putt?.84:.93,Sz-(putt?.17:.24)];
   const hipL=[Hc[0]+Math.cos(hy)*.11,Hc[1],Hc[2]+Math.sin(hy)*.11],hipR=[Hc[0]-Math.cos(hy)*.11,Hc[1],Hc[2]-Math.sin(hy)*.11];
-  const stance=(putt?.095:.22)+(ci<2?.04:0),fz=Sz+(putt?.13:.02),footL=[stance,.05,fz],footR=[-stance+.06*fol,.05+.07*fol,fz];
-  const kb=putt?.27:.1,ky=putt?.32:.5,kneeL=[(hipL[0]+footL[0])/2,ky,(hipL[2]+footL[2])/2+kb],kneeR=[(hipR[0]+footR[0])/2+.15*fol,ky-.03*fol,(hipR[2]+footR[2])/2+kb+.05*fol];
+  const stance=(putt?.095:.22)+(ci<2?.04:0),fz=Sz+(putt?.02:.02),footL=[stance,.05,fz],footR=[-stance+.06*fol,.05+.07*fol,fz];
+  const kb=putt?.09:.1,ky=putt?.47:.5,kneeL=[(hipL[0]+footL[0])/2,ky,(hipL[2]+footL[2])/2+kb],kneeR=[(hipR[0]+footR[0])/2+.15*fol,ky-.03*fol,(hipR[2]+footR[2])/2+kb+.05*fol];
   matSeg(P.thighL.model,LW(hipL),LW(kneeL),.085);matSeg(P.shinL.model,LW(kneeL),LW(footL),.07);matSeg(P.thighR.model,LW(hipR),LW(kneeR),.085);matSeg(P.shinR.model,LW(kneeR),LW(footR),.07);
   const fx=LD([1,0,0]),fyv=[0,1,0],fzz=LD([0,0,1]);
   matBasis(P.shoeL.model,fx,fyv,fzz,.11,.07,.27,LW([footL[0],.03,footL[2]+.04]));matBasis(P.shoeR.model,fx,fyv,fzz,.11,.07,.27,LW([footR[0],footR[1]-.02,footR[2]+.04]));
@@ -914,7 +932,7 @@ function poseGolfer(st){
   const tl=Math.hypot(S[0]-Hc[0],S[1]-Hc[1],S[2]-Hc[2]);
   matBasis(P.torso.model,LD(sd),LD(up),LD(fw),.23,tl/2+.08,.14,LW([(S[0]+Hc[0])/2,(S[1]+Hc[1])/2+.02,(S[2]+Hc[2])/2]));
   const neckTop=[S[0],S[1]+.1,S[2]+.03];matSeg(P.neck.model,LW(S),LW(neckTop),.05);
-  const turn=smooth(.3,.9,fol),face=nrm3([lerp(0,1,turn),lerp(-.6,.05,turn),lerp(1,.25,turn)]),Hd=putt?[S[0],S[1]+.12,S[2]+.16]:[S[0]+.03*turn,S[1]+.21,S[2]+.07];
+  const turn=smooth(.3,.9,fol),face=nrm3([lerp(0,1,turn),lerp(-.6,.05,turn),lerp(1,.25,turn)]),Hd=putt?[S[0],S[1]+.13,S[2]+.12]:[S[0]+.03*turn,S[1]+.21,S[2]+.07];
   matBasis(P.head.model,[1,0,0],[0,1,0],[0,0,1],.115,.12,.115,LW(Hd));
   matBasis(P.cap.model,[1,0,0],[0,1,0],[0,0,1],.123,.07,.123,LW([Hd[0],Hd[1]+.05,Hd[2]]));
   const bc=[Hd[0]+face[0]*.1,Hd[1]+.045+face[1]*.03,Hd[2]+face[2]*.1];matSeg(P.brim.model,LW(bc),LW([bc[0],bc[1]+.012,bc[2]]),.075);
@@ -942,7 +960,7 @@ const GOLFERS=[
   {id:'kate',name:'Curly Kate',tag:'Big fades and draws',power:1.03,meter:1.05,zone:1,spin:1,curl:2,bars:[3,3,3,5],shirt:[.95,.58,.14],legs:[.25,.25,.27],cap:[1,1,1]}];
 const BALLS=[['White',[.98,.98,.98]],['Yellow',[1,.86,.12]],['Orange',[1,.5,.1]],['Pink',[1,.42,.68]],['Lime',[.58,.98,.22]],['Sky blue',[.38,.72,1]],['Red',[.92,.16,.14]]];
 let myBall=BALLS[0];try{const b=BALLS.find(x=>x[0]===localStorage.getItem('kfl-ball'));if(b)myBall=b}catch(e){}
-let greenView=false,rollGuide=null;
+let greenView=false,rollGuide=null,lastShot=null,replaySave=null;
 let playMode='round',rangeClub=null,rangeBest=0;try{const m=localStorage.getItem('kfl-mode');if(['round','practice','range'].includes(m))playMode=m}catch(e){}
 let buggyPref=false,buggy=null,steer=0,engine=null;try{buggyPref=localStorage.getItem('kfl-buggy')==='1'}catch(e){}
 const WEATHERS={sunny:'Sunny',cloudy:'Cloudy',rain:'Rain',random:'Random'};let wxPref='random',weather='sunny',wet=0;try{const w=localStorage.getItem('kfl-weather');if(WEATHERS[w])wxPref=w}catch(e){}
@@ -1014,7 +1032,7 @@ function startHole(i){
   players.forEach((p,k)=>{const off=players.length>1?(k===0?-1.3:1.3):0;p.ball={x:t0[0]+td[1]*off,z:t0[1]-td[0]*off,y:0};p.strokes=0;p.done=false;p.inCup=false;p.prev=null});
   const mph=Math.round(lerp(hole.wind[0],hole.wind[1],Math.random())),a=Math.random()*Math.PI*2;wind={x:Math.sin(a),z:Math.cos(a),mph};
   applyWeather(wxPref==='random'?(()=>{const r=Math.random();return r<.5?'sunny':r<.75?'cloudy':'rain'})():wxPref);
-  turn=0;lie='tee';autoClub();target=defaultTarget();placeGolfer(false);spin={x:0,y:0};renderSpin();computeBreak();
+  lastShot=null;turn=0;lie='tee';autoClub();target=defaultTarget();placeGolfer(false);spin={x:0,y:0};renderSpin();computeBreak();
   const L=hole.dense,k=Math.max(0,L.length-45),f={x:L[k][0],z:L[k][1]};
   camFrom=frameCam(f,norm(hole.pin[0]-f.x,hole.pin[1]-f.z),95,32,26,.32,.3);cam={...camFrom};camGoal=aimCam();camT=0;camDur=3.4;
   state='intro';updateHUD();
@@ -1028,7 +1046,7 @@ function simRoll(x,z,vx,vz,maxT){
     if(code===7){res='pen:water';break}
     if(code===0){res='pen:oob';break}
     const dc=hyp(x-pin.x,z-pin.z),sp=hyp(vx,vz);if(dc<near)near=dc;
-    if(dc<CUP_CAP&&sp<CAPTURE){res='holed';x=pin.x;z=pin.z;break}
+    if(dc<CUP_CAP&&sp<CAPTURE){res='holed';break}
     const f=FRIC[code]*(wet?WETF[code]:1),g=grad(x,z),gs=G*hyp(g[0],g[1]);
     let ax=-G*g[0],az=-G*g[1];if(sp>1e-3){ax-=f*vx/sp;az-=f*vz/sp}
     const nvx=vx+ax*dt,nvz=vz+az*dt;
@@ -1036,7 +1054,7 @@ function simRoll(x,z,vx,vz,maxT){
     if(sp>1e-3&&nvx*vx+nvz*vz<0&&gs<f*.85){vx=vz=0;break}
     vx=nvx;vz=nvz;x+=vx*dt;z+=vz*dt;t+=dt;
     if(i&1)path.push([x,z,t])}
-  path.push([x,z,t]);return{path,end:{x,z},res,t,near}}
+  path.push([x,z,t]);return{path,end:{x,z},res,t,near,ev:[vx,vz]}}
 function inTree(tr,x,y,z){const d=hyp(x-tr.x,z-tr.z);if(d>tr.r)return false;const yy=y-tr.y;
   if(tr.kind===0){const cy=tr.ht-tr.r*.95,dy=(yy-cy)/(tr.r*.95);return d*d/(tr.r*tr.r*.8)+dy*dy<1||(d<.35&&yy>0&&yy<tr.ht*.5)}
   const k=(yy-tr.ht*.2)/(tr.ht*.8);if(k<0||k>1)return d<.35&&yy>0&&yy<tr.ht*.2;return d<tr.r*.9*(1-k)}
@@ -1113,6 +1131,7 @@ function takeShot(v,power){
   const P=cur(),pl=planShot({st:{x:P.ball.x,z:P.ball.z},tgt:target,power,spin,v,ci:clubIdx,lie,pf:P.pf});
   P.strokes++;P.prev={x:P.ball.x,z:P.ball.z};state='flight';trail=[];
   if(!P.isAI){if(pl.perfect)toast(power>1.02?'Perfect power!':'Perfect!','','perfect',900);else if(Math.abs(v)>.72)toast(v<0?'Hooked it':'Sliced it','','bad',900)}
+  lastShot={P,plan:pl,start:{x:P.prev.x,z:P.prev.z}};
   if(pl.kind==='putt'){sfx('putt');anim={kind:'roll',player:P,plan:pl,sim:pl.sim,t:0,speed:1.5,bounce:0,si:0,bi:0}}
   else{if(lie==='bunker'){spawn(P.ball.x,P.ball.z,'sandblast',150,null,[pl.nx,pl.nz]);spawn(P.ball.x,P.ball.z,'dust',22,null,[pl.nx,pl.nz]);sfx('land',{s:'bunker'})}else if(lie!=='tee'&&lie!=='green')spawn(P.ball.x,P.ball.z,'grass',12);if(wet&&lie!=='bunker')spawn(P.ball.x,P.ball.z,'spray',14);const dur=pl.fdur*pl.tEnd;sfx('hit',{perfect:pl.perfect,dur});anim={kind:'flight',player:P,plan:pl,t:0,dur}}
   updateHUD()}
@@ -1122,11 +1141,19 @@ function onLand(){const pl=anim.plan,B=anim.player.ball;
   if(s==='bunker'){spawn(pl.land.x,pl.land.z,'sand',70);spawn(pl.land.x,pl.land.z,'dust',10)}else if(wet&&s!=='water')spawn(pl.land.x,pl.land.z,'spray',12);if(s==='bunker');else if(s==='water'){spawn(pl.land.x,pl.land.z,'water',46);ripples.push({x:pl.land.x,z:pl.land.z,t:0})}else if(s!=='green')spawn(pl.land.x,pl.land.z,'grass',10);
   afterLand()}
 function afterLand(){const pl=anim.plan,B=anim.player.ball;B.y=0;
-  if(pl.dunk){anim.kind='sink';anim.t=0;anim.from={x:B.x,z:B.z};anim.note='dunk';return}
+  if(pl.dunk){anim.kind='sink';anim.t=0;anim.from={x:B.x,z:B.z};anim.note='dunk';anim.k=null;return}
   if(pl.sim&&pl.sim.path.length>2){anim.kind='roll';anim.sim=pl.sim;anim.t=0;anim.speed=1.35;anim.si=0;anim.bi=0;anim.bounce=pl.bounce;return}
   if(pl.res==='holed'){anim.kind='sink';anim.t=0;anim.from={x:B.x,z:B.z};return}
   finish(pl.res,pl.tree?'Clipped the trees':null)}
 function notify(P,title,sub,cls,ms){if(P.isAI)toast(title,P.name+(sub?' · '+sub:''),'opp',ms);else toast(title,sub,cls,ms)}
+function canReplay(){return !!lastShot&&(state==='aim'||state==='holeEnd')&&$('board').hidden}
+function startReplay(){if(!canReplay())return;const ls=lastShot,P=ls.P,pl=ls.plan;sfx('click');
+  replaySave={state,ball:{...P.ball},inCup:P.inCup,card:!$('card').hidden,cam:{...cam}};$('card').hidden=true;P.inCup=false;P.ball={x:ls.start.x,z:ls.start.z,y:0};trail=[];state='replay';
+  if(pl.kind==='putt'){sfx('putt');anim={kind:'roll',player:P,plan:pl,sim:pl.sim,t:0,speed:1.5,bounce:0,si:0,bi:0,replay:true}}
+  else{const dur=pl.fdur*pl.tEnd;sfx('hit',{perfect:pl.perfect,dur});anim={kind:'flight',player:P,plan:pl,t:0,dur,replay:true}}
+  cam=chaseStart(P,pl);$('replayBadge').hidden=false;updateHUD()}
+function endReplay(){const s=replaySave;if(!s)return;const P=lastShot.P;anim=null;P.ball=s.ball;P.inCup=s.inCup;state=s.state;trail=[];replaySave=null;cam=s.cam;$('replayBadge').hidden=true;if(s.card)$('card').hidden=false;updateHUD()}
+function chaseStart(P,pl){const d=pl.kind==='putt'?[pl.nx,pl.nz]:norm(pl.land.x-pl.st.x,pl.land.z-pl.st.z),b={x:pl.st.x,z:pl.st.z};return pl.kind==='putt'?frameCam({x:b.x+d[1]*.4,z:b.z-d[0]*.4},d,6,4.9,2.6,.27,.2):frameCam(b,d,40,8,3,.3,.2)}
 function golfReact(kind){if(golf)golf.react={kind,t:0}}
 function crowdReact(mode,lvl){if(!crowd)return;crowd.mode=mode;crowd.cheer=Math.max(crowd.cheer,lvl)}
 const SCORE_NAMES={'-3':'Albatross','-2':'Eagle','-1':'Birdie','0':'Par','1':'Bogey','2':'Double bogey'};
@@ -1138,6 +1165,7 @@ function rangeResult(res){const P=anim.player,pl=anim.plan;anim=null;P.ball.y=0;
   else{toast('Carry '+Math.round(carry)+'y','Total '+Math.round(total)+'y · '+CLUBS[clubIdx].n+' · Longest today '+Math.round(rangeBest)+'y','gold',2000);if(total>220&&total>=rangeBest)golfReact('fist')}
   updateHUD();setTimeout(()=>{if(playMode!=='range'||state==='menu')return;if(golf)golf.react=null;P.ball.x=P.prev.x;P.ball.z=P.prev.z;P.inCup=false;P.done=false;setupTurn()},2300)}
 function finish(res,note){
+  if(anim&&anim.replay){anim=null;setTimeout(endReplay,1100);return}
   if(playMode==='range'){rangeResult(res);return}
   const P=anim.player,pl=anim.plan;anim=null;P.ball.y=0;
   if(res==='holed'){
@@ -1268,7 +1296,7 @@ function ambTick(){if(!amb)return;const w=.015+wind.mph/18*.09,pd=hyp(cam.x-hole
   if(Math.abs(w-amb.lw)>.004){amb.windG.gain.setTargetAtTime(w,AC.currentTime,.5);amb.lw=w}
   if(Math.abs(c-amb.lc)>.003){amb.crowdG.gain.setTargetAtTime(c,AC.currentTime,.4);amb.lc=c}
   const rn=wet&&state!=='menu'?.09:0;if(rn!==amb.lr){amb.rainG.gain.setTargetAtTime(rn,AC.currentTime,.6);amb.rainLow.gain.setTargetAtTime(rn*.6,AC.currentTime,.6);amb.lr=rn}}
-$('gview').onclick=toggleGreenView;
+$('gview').onclick=toggleGreenView;$('replayBtn').onclick=startReplay;$('cardReplay').onclick=startReplay;
 function renderWeather(){$('wxOpts').innerHTML=Object.entries(WEATHERS).map(([k,v])=>'<button type="button" class="chip'+(k===wxPref?' sel':'')+'" data-w="'+k+'" aria-pressed="'+(k===wxPref)+'">'+v+'</button>').join('');
   document.querySelectorAll('[data-w]').forEach(el=>el.onclick=()=>{wxPref=el.dataset.w;try{localStorage.setItem('kfl-weather',wxPref)}catch(e){}sfx('click');renderWeather()})}
 renderWeather();
@@ -1281,12 +1309,12 @@ function holeWins(){let w=[0,0];if(players.length<2)return w;
 function matchText(){if(players.length<2)return'';const [a,b]=holeWins();if(a===b)return'Match: all square';return a>b?'Match: you '+(a-b)+' up':'Match: '+players[1].name.split(' ').pop()+' '+(b-a)+' up'}
 function updateHUD(){
   document.body.classList.toggle('driving',state==='buggy');const rng=playMode==='range'&&state!=='menu';$('holeLine').hidden=rng;$('rangeLine').hidden=!rng;
-  $('hNo').textContent=holeNum(holeIdx);if(rng){$('hName').textContent='Driving Range';}$('hTot').textContent=COURSES[playKey].from+HOLES.length;$('crsName').textContent=COURSES[playKey].name;$('hName').textContent=hole.name;$('hPar').textContent=hole.range?'Targets':'Par '+hole.par;$('hLen').textContent=hole.range?'60–295':hole.len;
+  $('hNo').textContent=holeNum(holeIdx);if(rng){$('hName').textContent='Driving Range';}$('hTot').textContent=playKey==='prac'?COURSES.prac.defs.length:COURSES[playKey].from+HOLES.length;$('crsName').textContent=COURSES[playKey].name;$('hName').textContent=hole.name;$('hPar').textContent=hole.range?'Targets':'Par '+hole.par;$('hLen').textContent=hole.range?'60–295':hole.len;
   $('rows').innerHTML=players.map((p,i)=>'<div class="row'+(i===turn&&state!=='holeEnd'?' active':'')+'"><span class="sw" style="background:'+p.kit.mark+'"></span><span class="nm">'+(p.isAI?p.name:esc(p.name)+' · '+(p.pf.name||'').split(' ').pop())+'</span><b>'+(p.inCup?'✓ ':'')+p.strokes+'</b></div>').join('');
   $('matchLine').textContent=matchText();$('wMph').textContent=wind.mph;$('wWx').textContent=wet?'Rain · slow ground':WEATHERS[weather];$('wWx').classList.toggle('wet',!!wet);$('lie').textContent=LIE_NAMES[lie]||'';
   const c=CLUBS[clubIdx];$('cName').textContent=c.n;$('cRange').textContent=effRange()+' y'+(rangeMul()<1?' (lie)':'');
   const P=players.length?cur():null,mine=P&&!P.isAI;
-  $('shoot').disabled=!(mine&&(state==='aim'||state==='pull'));$('cPrev').disabled=$('cNext').disabled=!(mine&&state==='aim');
+  $('shoot').disabled=!(mine&&(state==='aim'||state==='pull'));$('replayBtn').hidden=!(canReplay()&&state==='aim'&&!cur().isAI);$('cardReplay').hidden=!lastShot;$('cPrev').disabled=$('cNext').disabled=!(mine&&state==='aim');
   $('spinPanel').hidden=c.putt;const gv=canGreenView()||greenView;$('gview').hidden=!gv||state!=='aim';$('gview').textContent=greenView?'Back to tee view':'Green view';$('gview').classList.toggle('on',greenView);$('spinPanel').style.opacity=mine?1:.7;
   const pill=$('turnPill');
   if(players.length>1&&P&&!['holeEnd','menu','intro'].includes(state)){pill.hidden=false;pill.className=P.isAI?'opp':'you';pill.textContent=P.isAI?P.name+' to play'+(fast?' · fast':' · tap to speed up'):'Your shot'}
@@ -1345,7 +1373,11 @@ function renderScores(){const el=$('scores'),n=playerName(),all=loadRounds().fil
   el.innerHTML='<table class="sc"><thead><tr><th>Course</th><th>Rounds</th><th>Best</th></tr></thead><tbody>'+best+'</tbody></table><div class="eyebrow" style="margin-top:8px">Recent rounds</div><table class="sc"><tbody>'+recent+'</tbody></table>'}
 function renderCourses(){$('courses').innerHTML=Object.entries(COURSES).filter(([k,c])=>!c.hidden).map(([k,c])=>'<button type="button" class="crs'+(k===courseKey?' sel':'')+'" data-c="'+k+'" aria-pressed="'+(k===courseKey)+'">'+c.name+'<small>'+c.sub+' · par '+c.defs.slice(c.from,c.to).reduce((a,h)=>a+h.par,0)+'</small></button>').join('');
   document.querySelectorAll('.crs').forEach(el=>el.onclick=()=>{courseKey=el.dataset.c;try{localStorage.setItem('kfl-course',courseKey)}catch(e){}sfx('click');renderCourses()})}
-$('pname').value=myName;$('pname').addEventListener('input',()=>{myName=$('pname').value.slice(0,16);try{localStorage.setItem('kfl-name',myName)}catch(e){}renderScores()});
+$('pname').value=myName;$('pname').addEventListener('input',()=>{myName=$('pname').value.slice(0,16);try{localStorage.setItem('kfl-name',myName)}catch(e){}$('wGo').disabled=!$('pname').value.trim()});
+$('wGo').disabled=!myName.trim();
+function enterClub(){if(!$('pname').value.trim()){$('pname').focus();return}myName=$('pname').value.trim().slice(0,16);try{localStorage.setItem('kfl-name',myName)}catch(e){}audio();sfx('click');$('welcome').hidden=true;$('intro').hidden=false;$('meName').textContent=playerName();renderScores();if(players[0]&&!players[0].isAI)players[0].name=playerName()}
+$('wGo').onclick=enterClub;$('pname').addEventListener('keydown',e=>{if(e.key==='Enter')enterClub()});
+$('changeName').onclick=()=>{sfx('click');$('intro').hidden=true;$('welcome').hidden=false;$('pname').focus()};
 renderCourses();renderScores();
 /* ===== modes, practice, range, buggy option ===== */
 const MODES={round:'Round',practice:'Practice a hole',range:'Driving range'};
@@ -1353,14 +1385,14 @@ function renderModes(){$('modeOpts').innerHTML=Object.entries(MODES).map(([k,v])
   document.querySelectorAll('[data-m]').forEach(el=>el.onclick=()=>{playMode=el.dataset.m;try{localStorage.setItem('kfl-mode',playMode)}catch(e){}sfx('click');renderModes()});
   $('roundOpts').hidden=playMode!=='round';$('oppWrap').hidden=playMode!=='round';$('pracOpts').hidden=playMode!=='practice';$('soloStart').hidden=playMode==='round';$('soloStart').textContent=playMode==='range'?'Go to the range':'Start practice';
   $('buggyRow').hidden=playMode==='range'}
-$('pracSel').innerHTML='<optgroup label="The Master Course">'+MASTER_DEFS.map((h,i)=>'<option value="m:'+i+'">'+(i+1)+'. '+h.name+' · par '+h.par+' · '+Math.round(polyLen(h.line))+' y</option>').join('')+'</optgroup><optgroup label="Kingfisher Links">'+HOLE_DEFS.map((h,i)=>'<option value="kf:'+i+'">'+(i+1)+'. '+h.name+' · par '+h.par+'</option>').join('')+'</optgroup>';
+$('pracSel').innerHTML='<optgroup label="The Master Course">'+MASTER_DEFS.map((h,i)=>'<option value="m:'+i+'">'+(i+1)+'. '+h.name+' · par '+h.par+' · '+Math.round(polyLen(h.line))+' y</option>').join('')+'</optgroup><optgroup label="Heather Ridge">'+HEATHER_DEFS.map((h,i)=>'<option value="hr:'+i+'">'+(i+1)+'. '+h.name+' · par '+h.par+' · '+Math.round(polyLen(h.line))+' y</option>').join('')+'</optgroup><optgroup label="Little Wren pitch and putt">'+WREN_DEFS.map((h,i)=>'<option value="pp:'+i+'">'+(i+1)+'. '+h.name+' · '+Math.round(polyLen(h.line))+' y</option>').join('')+'</optgroup><optgroup label="Kingfisher Links">'+HOLE_DEFS.map((h,i)=>'<option value="kf:'+i+'">'+(i+1)+'. '+h.name+' · par '+h.par+'</option>').join('')+'</optgroup>';
 try{const v=localStorage.getItem('kfl-prac');if(v)$('pracSel').value=v}catch(e){}
 $('pracSel').addEventListener('change',()=>{try{localStorage.setItem('kfl-prac',$('pracSel').value)}catch(e){}});
 function renderBuggyOpt(){$('buggyOpt').textContent=buggyPref?'On':'Off';$('buggyOpt').classList.toggle('sel',buggyPref);$('buggyOpt').setAttribute('aria-pressed',buggyPref)}
 $('buggyOpt').onclick=()=>{buggyPref=!buggyPref;try{localStorage.setItem('kfl-buggy',buggyPref?'1':'0')}catch(e){}sfx('click');renderBuggyOpt()};renderBuggyOpt();
 $('soloStart').onclick=()=>{if($('soloStart').disabled)return;$('intro').hidden=true;audio();startAmbience();sfx('click');setTimeout(()=>{
   opp=null;dropPlayers();players=[mkPlayer(playerName(),false,myGolfer)];
-  if(playMode==='range'){playKey='range';rangeClub=null;rangeBest=0}else{const [c,i]=$('pracSel').value.split(':');COURSES.prac={name:c==='kf'?'Kingfisher Links':'The Master Course',sub:'Practice',defs:c==='kf'?HOLE_DEFS:MASTER_DEFS,from:+i,to:+i+1,hidden:true};playKey='prac'}
+  if(playMode==='range'){playKey='range';rangeClub=null;rangeBest=0}else{const [c,i]=$('pracSel').value.split(':'),PD={kf:[HOLE_DEFS,'Kingfisher Links'],m:[MASTER_DEFS,'The Master Course'],hr:[HEATHER_DEFS,'Heather Ridge'],pp:[WREN_DEFS,'Little Wren']}[c]||[MASTER_DEFS,'The Master Course'];COURSES.prac={name:PD[1],sub:'Practice',defs:PD[0],from:+i,to:+i+1,hidden:true};playKey='prac'}
   HOLES=holesFor(playKey);startHole(0)},30)};
 $('cardBtn2').onclick=()=>{sfx('click');toMenu()};
 renderModes();
@@ -1379,7 +1411,7 @@ const Store={online:false,db:null,ready:null,
   async list(c){let rows=loadRounds().filter(r=>r.c===c),src='local';if(await this.init()){try{const q=await this.db.collection(window.KFL_COLLECTION||'kfl_rounds').where('c','==',c).limit(800).get();rows=q.docs.map(d=>d.data());src='online'}catch(e){console.warn(e);src='local-fallback'}}return{rows,src}}};
 Store.init();
 let boardKey='m18';
-async function openBoard(k){if(k)boardKey=k;$('board').hidden=false;$('bTabs').innerHTML=Object.entries(COURSES).filter(([k,c])=>!c.hidden).map(([k,c])=>'<button type="button" class="btabb'+(k===boardKey?' sel':'')+'" data-bk="'+k+'">'+(k==='kf'?'Kingfisher':c.sub)+'</button>').join('');
+async function openBoard(k){if(k)boardKey=k;$('board').hidden=false;$('bTabs').innerHTML=Object.entries(COURSES).filter(([k,c])=>!c.hidden).map(([k,c])=>'<button type="button" class="btabb'+(k===boardKey?' sel':'')+'" data-bk="'+k+'">'+(c.tab||c.sub)+'</button>').join('');
   document.querySelectorAll('[data-bk]').forEach(el=>el.onclick=()=>{sfx('click');openBoard(el.dataset.bk)});
   $('bBody').innerHTML='<tr><td class="bmsg" colspan="30">Fetching scores…</td></tr>';$('bHead').innerHTML='';
   const C=COURSES[boardKey],holes=C.defs.slice(C.from,C.to),{rows,src}=await Store.list(boardKey);if(boardKey!==k&&k)return;
@@ -1443,7 +1475,7 @@ sb.addEventListener('pointerup',()=>{if(pullSrc==='button')releasePull()});
 sb.addEventListener('pointercancel',()=>{if(state==='pull'&&pullSrc==='button'){state='aim';golf.s=0;sb.classList.remove('held');sfx('holdStop')}});
 sb.addEventListener('contextmenu',e=>e.preventDefault());
 window.addEventListener('keydown',e=>{
-  if(!$('intro').hidden||!$('card').hidden)return;
+  if(!$('intro').hidden||!$('card').hidden||!$('welcome').hidden||!$('board').hidden)return;
   if(e.code==='Space'){e.preventDefault();if(state==='intro'){skipIntro();return}if(players.length&&cur().isAI){fast=true;updateHUD();return}if(!e.repeat&&state==='aim')startPull('button');return}
   if(state!=='aim')return;const fine=CLUBS[clubIdx].putt?.4:1;
   if(e.key==='ArrowLeft'){e.preventDefault();rotAim(-.01*fine)}
@@ -1451,6 +1483,7 @@ window.addEventListener('keydown',e=>{
   if(e.key==='ArrowUp'){e.preventDefault();distAim(CLUBS[clubIdx].putt?.3:2)}
   if(e.key==='ArrowDown'){e.preventDefault();distAim(CLUBS[clubIdx].putt?-.3:-2)}
   if(e.key==='g'||e.key==='G')toggleGreenView();
+  if(e.key==='r'||e.key==='R')startReplay();
   if(e.key==='q'||e.key==='Q')changeClub(-1);if(e.key==='e'||e.key==='E')changeClub(1)});
 window.addEventListener('keyup',e=>{if(e.code==='Space'){e.preventDefault();if(pullSrc==='button')releasePull()}});
 
@@ -1475,6 +1508,8 @@ function chaseCam(){const B=anim.player.ball,pl=anim.plan,dir=pl.kind==='putt'?[
   const rem=hyp(end.x-B.x,end.z-B.z);
   if(pl.kind==='putt'||(anim.kind!=='flight'&&rem<12&&hyp(B.x-hole.pin[0],B.z-hole.pin[1])<15)){const dd=norm(end.x-B.x,end.z-B.z),u=rem>.5?dd:dir;return frameCam(B,u,Math.max(3,rem+1.5),2.8,1.5,.32,.28)}
   const fd=anim.kind==='flight'?norm(pl.nx,pl.nz):dir,D=Math.max(16,rem+8),g=frameCam(B,fd,D,.3*D+3,.2*D+2.5,.3,.22);g.y+=Math.max(0,B.y)*.6;return g}
+function puttZoomCam(){const p=pinPt(),py=hAt(p.x,p.z)-.06,dx=p.x-cam.x,dz=p.z-cam.z,dh=hyp(dx,dz),h=norm(dx,dz),pitch=Math.atan2(cam.y-py,dh),d=Math.hypot(dh,cam.y-py);
+  return{x:cam.x,y:cam.y,z:cam.z,hx:h[0],hz:h[1],pitch,F:Math.min((H/2)/Math.tan(.035),Math.max(cam.F,(H*.16)*d/(2*CUP_R)))}}
 function cupCam(){const p=pinPt(),u=hyp(anim.from.x-p.x,anim.from.z-p.z)>.05?norm(p.x-anim.from.x,p.z-anim.from.z):[cam.hx,cam.hz];return frameCam({x:p.x-u[0]*.5,z:p.z-u[1]*.5},u,.9,.7,.95,.3,.3)}
 function reactCam(){const g=golf,[dx,dz]=g.dir,lat=[dz,-dx],zc=golfBodyLat(g.ci),bx=g.x+lat[0]*zc,bz=g.z+lat[1]*zc,ex=bx+lat[0]*3.3+dx*.7,ez=bz+lat[1]*3.3+dz*.7,gb=hAt(bx,bz),ey=Math.max(gb+1.35,hAt(ex,ez)+1.1),h=norm(bx-ex,bz-ez),dist=hyp(bx-ex,bz-ez);
   return{x:ex,y:ey,z:ez,hx:h[0],hz:h[1],pitch:Math.atan2(ey-(gb+1.05),dist),F:(H/2)/Math.tan(.32)}}
@@ -1575,13 +1610,28 @@ function drawArc(){
   octx.restore()}
 
 /* ================= loop ================= */
+/* ball into the cup: rolls over the lip, falls, clips the wall, bounces on the bottom */
+function stepSink(a,B,dt){const px=hole.pin[0],pz=hole.pin[1],CD=.2,rw=CUP_R-BALL_R;
+  if(!a.k){let vx=0,vz=0;if(a.note==='dunk'){const d=norm(a.plan.nx||0,a.plan.nz||1);vx=d[0]*1.2;vz=d[1]*1.2}else if(a.sim&&a.sim.ev){vx=a.sim.ev[0];vz=a.sim.ev[1]}
+    a.k={x:B.x-px,z:B.z-pz,y:a.note==='dunk'?.6:0,vx,vz,vy:a.note==='dunk'?-6:0,fall:a.note==='dunk',rest:0,hits:0,bottom:false,T:0}}
+  const k=a.k;k.T+=dt;let sub=Math.ceil(dt/.004),h=dt/sub;
+  for(let i=0;i<sub;i++){let r=hyp(k.x,k.z);
+    if(!k.fall){const ax=-k.x/(r||1)*7,az=-k.z/(r||1)*7;k.vx+=ax*h;k.vz+=az*h;const sp=hyp(k.vx,k.vz),f=1.6;if(sp>1e-3){k.vx-=k.vx/sp*f*h;k.vz-=k.vz/sp*f*h}
+      k.x+=k.vx*h;k.z+=k.vz*h;r=hyp(k.x,k.z);if(r<CUP_R-BALL_R*.15)k.fall=true;k.y=-Math.max(0,(CUP_R-r))*.25}
+    else{k.vy-=G*h;k.x+=k.vx*h;k.z+=k.vz*h;k.y+=k.vy*h;r=hyp(k.x,k.z);
+      const depth=-k.y;if(r>rw){const nx=k.x/r,nz=k.z/r,vr=k.vx*nx+k.vz*nz;k.x=nx*rw;k.z=nz*rw;if(depth>BALL_R*.3&&vr>0){k.vx-=1.38*vr*nx;k.vz-=1.38*vr*nz;k.vx*=.85;k.vz*=.85;if(vr>.15&&k.hits<4){k.hits++;sfx('lip')}}else if(vr>0){k.vx-=vr*nx;k.vz-=vr*nz}}
+      if(k.y<-CD){k.y=-CD;if(!k.bottom){k.bottom=true;sfx('cup');cupPlayed=true}if(k.vy<-.5){k.vy=-k.vy*.3}else k.vy=0;k.vx*=.55;k.vz*=.55}}}
+  B.x=px+k.x;B.z=pz+k.z;B.y=k.y;
+  if(k.bottom&&Math.abs(k.vy)<.05&&hyp(k.vx,k.vz)<.08)k.rest+=dt;
+  if(k.rest>.35||k.T>3)finish('holed',a.note)}
 function step(dt){
   let goal=null,rate=4;
   if(state==='intro'){if(camT<1){camT=Math.min(1,camT+dt/camDur);cam=lerpCam(camFrom,camGoal,easeIO(camT));if(camT>=1)setupTurn()}}
   else if(state==='aim'||state==='aiThink'){goal=aimCam();rate=4.5}
   else if(state==='pull'||(state==='swing'&&golf.swing&&!golf.swing.fired)){goal=swingCam();rate=6}
+  else if(anim&&anim.plan&&anim.plan.kind==='putt'&&!anim.replay){goal=anim.kind==='sink'?puttZoomCam():null;rate=2.2}
   else if(anim&&anim.kind!=='sink'){goal=chaseCam();rate=anim.kind==='flight'?3.2:3.8}
-  else if(anim&&anim.kind==='sink'){goal=cupCam();rate=6}
+  else if(anim&&anim.kind==='sink'){goal=cupCam();rate=5}
   else if(state==='rest'&&golf&&golf.react&&golf.react.t<2.4){goal=reactCam();rate=golf.react.t<.1?30:5}
   else if(state==='holeEnd'){goal=orbitCam(dt);rate=1.5}
   else if(state==='buggy'&&buggy){stepBuggy(dt);if(buggy){goal=frameCam({x:buggy.x,z:buggy.z},[Math.sin(buggy.yaw),Math.cos(buggy.yaw)],24,7.5,3.4,.3,.18);rate=4}}
@@ -1601,13 +1651,8 @@ function step(dt){
       const a=path[anim.si],b=path[Math.min(path.length-1,anim.si+1)],k=b[2]>a[2]?clamp((tau-a[2])/(b[2]-a[2]),0,1):1;B.x=lerp(a[0],b[0],k);B.z=lerp(a[1],b[1],k);
       const pb=Math.min(1,anim.t/.75);B.y=anim.bounce?anim.bounce*Math.abs(Math.sin(Math.PI*2.2*pb))*Math.pow(1-pb,1.6):0;const bi=Math.floor(pb*2.2);if(anim.bounce&&bi!==anim.bi&&bi<2){anim.bi=bi;sfx('bounce',{v:.6})}
       if(trail.length){pushTrail(B);trail.shift();if(trail.length)trail.shift()}
-      if(tau>=sim.t){B.x=sim.end.x;B.z=sim.end.z;B.y=0;if(sim.res==='holed'){anim.kind='sink';anim.t=0;anim.from={x:B.x,z:B.z}}else finish(sim.res,pl.tree?'Clipped the trees':null)}}
-    else if(anim.kind==='sink'){const a=anim,T=a.t,px=hole.pin[0],pz=hole.pin[1],rr=CUP_R-BALL_R*.45;
-      if(a.lip==null){const dx=a.from.x-px,dz=a.from.z-pz,d=hyp(dx,dz);a.ang0=d>1e-3?Math.atan2(dz,dx):Math.random()*6.28;a.r0=Math.max(d,rr);a.sw=a.note==='dunk'?0:(Math.random()<.5?-1:1)*(.6+Math.random()*1.9);a.lip=a.note==='dunk'?0:.3+Math.abs(a.sw)*.16}
-      if(T<a.lip){const k=T/a.lip,ang=a.ang0+a.sw*(1-Math.pow(1-k,1.6)),r=lerp(a.r0,rr,Math.min(1,k*4));B.x=px+Math.cos(ang)*r;B.z=pz+Math.sin(ang)*r;B.y=-.008-.022*k;if(!a.rat||T-a.rat>.11){a.rat=T;sfx('lip')}}
-      else{if(!a.dropped){a.dropped=1;a.ang1=a.ang0+a.sw;sfx('cup');cupPlayed=true}
-        const td=T-a.lip,k=Math.min(1,td/.16),r=rr*(1-easeOut(k));B.x=px+Math.cos(a.ang1)*r;B.z=pz+Math.sin(a.ang1)*r;
-        const fall=.5*12*td*td;B.y=fall<.17?-.03-fall:-.2+.03*Math.abs(Math.sin((td-.168)*20))*Math.exp(-(td-.168)*7);if(td>.8)finish('holed',a.note)}}}
+      if(tau>=sim.t){B.x=sim.end.x;B.z=sim.end.z;B.y=0;if(sim.res==='holed'){anim.kind='sink';anim.t=0;anim.from={x:B.x,z:B.z};anim.k=null}else finish(sim.res,pl.tree?'Clipped the trees':null)}}
+    else if(anim.kind==='sink')stepSink(anim,B,dt)}
   if(state==='rest'&&trail.length)trail.shift();
   updateParts(dt)}
 let last=performance.now(),shownPin=-1,shownRot=null,ambT=0;
@@ -1615,12 +1660,12 @@ let TESTX=location.hash==='#fast'?10:1;if(TESTX>1)window.__kfl={get state(){retu
 function loop(now){
   const dt=Math.min(.05,(now-last)/1000);last=now;R.time=now/1000;
   try{
-    const n=(fast&&players.length&&cur().isAI?3:1)*TESTX,sdt=anim&&anim.kind==='sink'?dt*.6:dt;for(let i=0;i<n;i++)step(sdt);if(golf&&golf.react)golf.react.t+=sdt*n;
+    const n=(fast&&players.length&&cur().isAI?3:1)*TESTX,sdt=anim&&anim.kind==='sink'?dt*.45:dt;for(let i=0;i<n;i++)step(sdt);if(golf&&golf.react)golf.react.t+=sdt*n;
     applyCam();
     if(crowd){crowd.cheer=Math.max(0,crowd.cheer-dt*.26);posePeople(R.time)}
     animFlag(R.time);if(pinObj){const out=players.length>0&&CLUBS[clubIdx].putt&&state!=='holeEnd'&&state!=='menu';pinObj.flag.visible=pinObj.pole.visible=!out}R.wind=[wind.x*wind.mph*.0045,wind.z*wind.mph*.0045];
     updateBalls();updateAimVisuals(R.time);if(greenGrid)greenGrid.visible=players.length>0&&state!=='menu'&&(distPin(cur())<60||greenView||hyp(cam.x-hole.pin[0],cam.z-hole.pin[1])<70);updateTrail();updateRain(dt);updateWindPts(dt);updateFlow(dt);updateRipples(dt);
-    const showG=!!golf&&players.length&&!['menu','intro','holeEnd','buggy'].includes(state)&&!(anim&&anim.player!==cur());showGolfer(showG);
+    const showG=!!golf&&players.length&&!['menu','intro','holeEnd','buggy','replay'].includes(state)&&!(anim&&anim.player!==cur());showGolfer(showG);
     golferM.parts.hand2.visible=false;if(showG){const st={x:golf.x,z:golf.z,y:hAt(golf.x,golf.z),dir:golf.dir,ci:golf.ci,s:golf.s};if(golf.react&&state==='rest'){golferM.parts.hand2.visible=true;poseReact(st,golf.react.kind,golf.react.t)}else poseGolfer(st)}
     if(buggy)poseBuggy(buggy,buggy.P.kit);
     let fx,fz,ext;if(buggy){fx=buggy.x;fz=buggy.z;ext=40}else if(anim){fx=anim.player.ball.x;fz=anim.player.ball.z;ext=70}else if(players.length&&showAim()){const b=cur().ball;fx=(b.x+target.x)/2;fz=(b.z+target.z)/2;ext=clamp(hyp(target.x-b.x,target.z-b.z)*.6+25,30,150)}else{fx=cam.x+cam.hx*60;fz=cam.z+cam.hz*60;ext=90}

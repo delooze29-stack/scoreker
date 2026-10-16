@@ -21,14 +21,14 @@ service cloud.firestore {
       return e == 'delooze29@gmail.com' ? 'delooze29@googlemail.com' : e;
     }
 
-    // Kingfisher Links golf game leaderboard (golf/ folder).
+    // Doughty's Links golf game leaderboard (golf/ folder).
     // Anyone can read the board and add a finished round; nobody can edit or delete rounds.
     match /kfl_rounds/{roundId} {
       allow read: if true;
       allow create: if request.resource.data.keys().hasOnly(['n', 'c', 'd', 's', 'p', 'h', 'o', 'r', 'g'])
         && request.resource.data.n is string
         && request.resource.data.n.size() > 0 && request.resource.data.n.size() <= 16
-        && request.resource.data.c in ['kf', 'mf', 'mb', 'm18']
+        && request.resource.data.c in ['kf', 'mf', 'mb', 'm18', 'hr', 'pp']
         && request.resource.data.s is int && request.resource.data.s > 0 && request.resource.data.s < 200
         && request.resource.data.p is int
         && request.resource.data.h is list && request.resource.data.h.size() <= 18;
