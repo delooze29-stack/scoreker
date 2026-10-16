@@ -33,3 +33,8 @@ Weekend football predictions for two players, played as a frame of snooker.
 - Friday 22:35, Saturday & Sunday 16:20 / 19:20 / 22:20, Monday 08:10 — fetch results
 
 Roughly 10–40 API credits a week, well under the free 500 a month. You can also run the workflow by hand from the Actions tab.
+
+## Kingfisher Links (golf game)
+
+The `golf/` folder is a separate 3D golf game, played at `https://delooze29-stack.github.io/scoreker/golf/`.
+Its leaderboard saves finished rounds to this Firebase project in the `kfl_rounds` collection (see the `kfl_rounds` block in `firestore.rules`). Anyone can read the board and add a round; nobody can edit or delete them.
