@@ -34,7 +34,6 @@ Weekend football predictions for two players, played as a frame of snooker.
 
 Roughly 10–40 API credits a week, well under the free 500 a month. You can also run the workflow by hand from the Actions tab.
 
-## Kingfisher Links (golf game)
+## Doughty's Links (golf game) leaderboard
 
-The `golf/` folder is a separate 3D golf game, played at `https://delooze29-stack.github.io/scoreker/golf/`.
-Its leaderboard saves finished rounds to this Firebase project in the `kfl_rounds` collection (see the `kfl_rounds` block in `firestore.rules`). Anyone can read the board and add a round; nobody can edit or delete them.
+The golf game lives in its own repo, Doughty-Links (https://delooze29-stack.github.io/Doughty-Links/), but its leaderboard saves rounds to this Firebase project in the `kfl_rounds` collection. Keep the `kfl_rounds` block in `firestore.rules`.
