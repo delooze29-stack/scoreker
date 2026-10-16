@@ -162,6 +162,7 @@ body.driving .hud .bottom{visibility:hidden}
 .linkbtn{pointer-events:auto;background:none;border:0;padding:0;font:inherit;color:var(--gold);text-decoration:underline;cursor:pointer;letter-spacing:inherit;text-transform:inherit}
 .welcome h1{font-size:44px}.welcome .go{margin-top:4px}
 #replayBadge{position:fixed;left:max(16px, env(safe-area-inset-left, 0px));top:calc(env(safe-area-inset-top, 0px) + 150px);z-index:4;pointer-events:none;font:400 20px var(--display);letter-spacing:.12em;text-transform:uppercase;color:#fff;background:#c4161c;padding:6px 14px;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.35)}
+#replayBtn{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom, 0px) + 46px);z-index:3;font-size:13px;padding:9px 16px;color:#fff;background:rgba(196,22,28,.92);border-color:rgba(255,255,255,.5)}
 .wx{font-size:11px;font-weight:800;color:var(--muted);margin-top:2px}.wx.wet{color:#8fd3ff}
 #buggyUI{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom, 0px) + 18px);display:flex;gap:14px;align-items:center;z-index:3}
 #buggyUI button{pointer-events:auto;touch-action:none;width:74px;height:74px;border-radius:50%;border:3px solid rgba(255,255,255,.5);background:var(--panel);color:#fff;font:400 34px var(--display);cursor:pointer}
@@ -277,7 +278,7 @@ table.btab td.bmsg{font:600 16px var(--body);color:#0c5a32;padding:16px;height:a
     <h1>Doughty's Links</h1></div><button class="go alt" id="openBoard" type="button">Leaderboard</button></div>
     <ul>
       <li><b>Aim:</b> drag the ring, or swipe the course left and right. Swipe up and down to change distance.</li>
-      <li><b>Power:</b> grab your ball and pull it down. Past 100% is extra power, but the green zone shrinks.</li>
+      <li><b>Power:</b> grab your ball and pull it down. Past 100% is extra power, but the green zone shrinks. While you pull, move left or right to fine-tune your aim (or use the arrow keys).</li>
       <li><b>Accuracy:</b> let go when the needle is in the green. The harder you pull, the faster it swings. A yellow marker on the course shows how far that power will send the ball, before wind and slopes.</li>
       <li><b>Spin:</b> tap the ball bottom-left. Top for topspin, bottom for backspin, left side to draw and right side to fade.</li>
       <li><b>Green view:</b> on approach shots, tap Green view (or press G) for a close-up of the green. The yellow dots show how the ball should roll.</li>
@@ -296,6 +297,8 @@ table.btab td.bmsg{font:600 16px var(--body);color:#0c5a32;padding:16px;height:a
     <div class="balls" id="balls"></div>
     <div class="eyebrow">Weather</div>
     <div class="chips" id="wxOpts"></div>
+    <div class="eyebrow">Fairway speed</div>
+    <div class="chips" id="rollOpts"></div>
     <div class="optrow" id="buggyRow"><span>Drive a buggy to your ball after each shot</span><button class="chip" id="buggyOpt" type="button">Off</button></div>
     <button class="go" id="soloStart" type="button" hidden disabled>Start practice</button>
     <div id="oppWrap"><div class="eyebrow">Choose your opponent</div>
@@ -960,10 +963,11 @@ const GOLFERS=[
   {id:'kate',name:'Curly Kate',tag:'Big fades and draws',power:1.03,meter:1.05,zone:1,spin:1,curl:2,bars:[3,3,3,5],shirt:[.95,.58,.14],legs:[.25,.25,.27],cap:[1,1,1]}];
 const BALLS=[['White',[.98,.98,.98]],['Yellow',[1,.86,.12]],['Orange',[1,.5,.1]],['Pink',[1,.42,.68]],['Lime',[.58,.98,.22]],['Sky blue',[.38,.72,1]],['Red',[.92,.16,.14]]];
 let myBall=BALLS[0];try{const b=BALLS.find(x=>x[0]===localStorage.getItem('kfl-ball'));if(b)myBall=b}catch(e){}
-let greenView=false,rollGuide=null,lastShot=null,replaySave=null;
+let pullBase=null,pullX=null,greenView=false,rollGuide=null,lastShot=null,replaySave=null;
 let playMode='round',rangeClub=null,rangeBest=0;try{const m=localStorage.getItem('kfl-mode');if(['round','practice','range'].includes(m))playMode=m}catch(e){}
 let buggyPref=false,buggy=null,steer=0,engine=null;try{buggyPref=localStorage.getItem('kfl-buggy')==='1'}catch(e){}
 const WEATHERS={sunny:'Sunny',cloudy:'Cloudy',rain:'Rain',random:'Random'};let wxPref='random',weather='sunny',wet=0;try{const w=localStorage.getItem('kfl-weather');if(WEATHERS[w])wxPref=w}catch(e){}
+const ROLLS={slow:['Slow',1],normal:['Normal',1.6],fast:['Fast',2.4]};let rollPref='normal';try{const r=localStorage.getItem('kfl-roll');if(ROLLS[r])rollPref=r}catch(e){}
 const WETF=[1,1.25,1.5,1.5,1.4,1.3,1,1];
 function applyWeather(w){weather=w;wet=w==='rain'?1:0;const B=WX_BASE,k=w==='rain'?1:w==='cloudy'?.5:0,mix=(a,b)=>a.map((v,i)=>lerp(v,b[i],k));
   R.sunCol=B.sunCol.map(v=>v*(1-.62*k));R.sky=mix(B.sky,[.62,.65,.68]);R.gnd=mix(B.gnd,[.4,.42,.38]);R.fog=mix(B.fog,[.66,.7,.72]);R.skyTop=mix(B.skyTop,[.4,.45,.5]);R.skyHor=mix(B.skyHor,[.7,.73,.75]);R.skyGnd=mix(B.skyGnd,[.45,.5,.45]);R.cloud=k;
@@ -1082,7 +1086,7 @@ function planShot(o){
   if(hyp(L[0]-pin.x,L[1]-pin.z)<CUP_CAP){out.res='holed';out.dunk=true;out.end={...pin};out.sim=null}
   else if(s===7||s===0){out.res='pen:'+SURF[s];out.end={...out.land};out.sim=null}
   else if(s===6){out.res='rest';out.end={...out.land};out.sim=null}
-  else{const base=carry*c.roll*(s===5?.7:s===1?.35:1),sy=sY*(s===1?.3:1);
+  else{const base=carry*c.roll*(s===5?.7:s===1?.35*Math.sqrt(ROLLS[rollPref][1]):ROLLS[rollPref][1]),sy=sY*(s===1?.3:1);
     const len=sy>=0?base*(1+1.6*sy):base*(1+sy)-carry*.06*(-sy)*(s===5?1:.55);
     const v0=Math.sign(len)*Math.sqrt(2*FRIC[s]*Math.abs(len)),u=norm(nx*carry+2*ox*tL,nz*carry+2*oz*tL);
     let vx=u[0]*v0,vz=u[1]*v0;if(v0>0){vx+=u[1]*sX*.15*v0;vz+=-u[0]*sX*.15*v0}
@@ -1119,8 +1123,10 @@ function aiPlan(){
   return{target:{x:best.tgt.x+wind.x*wk,z:best.tgt.z+wind.z*wk},spin:best.spin,v:clamp(gauss()*sk.sd*(badLieOf(lie)?1.3:1),-.98,.98),power:1}}
 
 /* ================= shooting ================= */
-function startPull(src,y){
-  if(state!=='aim'||cur().isAI)return;audio();state='pull';pull=0;holdT=0;phase=0;needle=-1;pullSrc=src;pullStart=y||0;pullPos=null;camLockDir=null;
+let pullAng=0;
+function steerPull(a){if(!pullBase)return;a=clamp(a,-.35,.35);pullAng=a;const b=cur().ball,dx=pullBase.x-b.x,dz=pullBase.z-b.z,c=Math.cos(a),s=Math.sin(a);target={x:b.x+dx*c+dz*s,z:b.z+dz*c-dx*s};placeGolfer(true)}
+function startPull(src,y){pullAng=0;
+  if(state!=='aim'||cur().isAI)return;audio();state='pull';pull=0;holdT=0;phase=0;needle=-1;pullSrc=src;pullStart=y||0;pullPos=null;camLockDir=null;pullBase={...target};pullX=null;
   $('shoot').classList.toggle('held',src==='button');sfx('holdStart');updateHUD()}
 function releasePull(){
   if(state!=='pull'||pullSrc==='ai')return;$('shoot').classList.remove('held');sfx('holdStop');
@@ -1300,6 +1306,9 @@ $('gview').onclick=toggleGreenView;$('replayBtn').onclick=startReplay;$('cardRep
 function renderWeather(){$('wxOpts').innerHTML=Object.entries(WEATHERS).map(([k,v])=>'<button type="button" class="chip'+(k===wxPref?' sel':'')+'" data-w="'+k+'" aria-pressed="'+(k===wxPref)+'">'+v+'</button>').join('');
   document.querySelectorAll('[data-w]').forEach(el=>el.onclick=()=>{wxPref=el.dataset.w;try{localStorage.setItem('kfl-weather',wxPref)}catch(e){}sfx('click');renderWeather()})}
 renderWeather();
+function renderRoll(){$('rollOpts').innerHTML=Object.entries(ROLLS).map(([k,v])=>'<button type="button" class="chip'+(k===rollPref?' sel':'')+'" data-r="'+k+'" aria-pressed="'+(k===rollPref)+'">'+v[0]+'</button>').join('');
+  document.querySelectorAll('[data-r]').forEach(el=>el.onclick=()=>{rollPref=el.dataset.r;try{localStorage.setItem('kfl-roll',rollPref)}catch(e){}sfx('click');renderRoll()})}
+renderRoll();
 $('mute').onclick=()=>{muted=!muted;$('mute').textContent=muted?'Sound off':'Sound on';if(master)master.gain.value=muted?0:.9};
 
 /* ================= HUD ================= */
@@ -1461,7 +1470,7 @@ glc.addEventListener('pointerdown',e=>{
   if(rp&&hyp(sx-rp[0],(sy-rp[1])*2.2)<R*R0px(rp[2])+34){aimDrag={mode:'ring'};camLockDir=aimDir();setTargetFrom(sx,sy);return}
   aimDrag={mode:'swipe',x:sx,y:sy}});
 glc.addEventListener('pointermove',e=>{const [sx,sy]=canvasXY(e);
-  if(state==='pull'&&pullSrc==='ball'){pull=clamp((sy-pullStart)/(H*.2),0,1.1);pullPos=[sx,sy];return}
+  if(state==='pull'&&pullSrc==='ball'){pull=clamp((sy-pullStart)/(H*.2),0,1.1);pullPos=[sx,sy];if(pullX==null)pullX=sx;steerPull((sx-pullX)*(CLUBS[clubIdx].putt?.0009:.0016));return}
   if(!aimDrag||state!=='aim')return;
   if(aimDrag.mode==='ring'){setTargetFrom(sx,sy);return}
   const dx=sx-aimDrag.x,dy=sy-aimDrag.y;aimDrag.x=sx;aimDrag.y=sy;const putt=CLUBS[clubIdx].putt;
@@ -1477,6 +1486,7 @@ sb.addEventListener('contextmenu',e=>e.preventDefault());
 window.addEventListener('keydown',e=>{
   if(!$('intro').hidden||!$('card').hidden||!$('welcome').hidden||!$('board').hidden)return;
   if(e.code==='Space'){e.preventDefault();if(state==='intro'){skipIntro();return}if(players.length&&cur().isAI){fast=true;updateHUD();return}if(!e.repeat&&state==='aim')startPull('button');return}
+  if(state==='pull'&&(e.key==='ArrowLeft'||e.key==='ArrowRight')){e.preventDefault();const f=CLUBS[clubIdx].putt?.4:1;pullBase=pullBase||{...target};pullAng=(pullAng||0)+(e.key==='ArrowLeft'?-.01:.01)*f;steerPull(pullAng);return}
   if(state!=='aim')return;const fine=CLUBS[clubIdx].putt?.4:1;
   if(e.key==='ArrowLeft'){e.preventDefault();rotAim(-.01*fine)}
   if(e.key==='ArrowRight'){e.preventDefault();rotAim(.01*fine)}
@@ -1504,10 +1514,12 @@ function aimCam(){const b=cur().ball,c=CLUBS[clubIdx],d=hyp(target.x-b.x,target.
   const D=Math.max(40,Math.min(effRange(),d+30));return frameCam(b,camLockDir||aimDir(),D,.28*D+3,.17*D+2.2,.3,.22)}
 function swingCam(){const b=cur().ball,c=CLUBS[clubIdx],d=hyp(target.x-b.x,target.z-b.z),dir=aimDir();
   return c.putt?frameCam({x:b.x+dir[1]*.3,z:b.z-dir[0]*.3},dir,Math.max(5,d+1),4.9,2.6,.27,.2):frameCam(b,dir,Math.max(30,d),4.8,2.0,.28,.12)}
-function chaseCam(){const B=anim.player.ball,pl=anim.plan,dir=pl.kind==='putt'?[pl.nx,pl.nz]:norm(pl.end.x-B.x,pl.end.z-B.z),end=anim.kind==='flight'?pl.land:pl.end;
-  const rem=hyp(end.x-B.x,end.z-B.z);
-  if(pl.kind==='putt'||(anim.kind!=='flight'&&rem<12&&hyp(B.x-hole.pin[0],B.z-hole.pin[1])<15)){const dd=norm(end.x-B.x,end.z-B.z),u=rem>.5?dd:dir;return frameCam(B,u,Math.max(3,rem+1.5),2.8,1.5,.32,.28)}
-  const fd=anim.kind==='flight'?norm(pl.nx,pl.nz):dir,D=Math.max(16,rem+8),g=frameCam(B,fd,D,.3*D+3,.2*D+2.5,.3,.22);g.y+=Math.max(0,B.y)*.6;return g}
+function chaseCam(){const B=anim.player.ball,pl=anim.plan;
+  if(!anim.cdir)anim.cdir=pl.kind==='putt'?[pl.nx,pl.nz]:norm((pl.land?pl.land.x:pl.end.x)-pl.st.x,(pl.land?pl.land.z:pl.end.z)-pl.st.z);
+  const fd=anim.cdir;
+  if(pl.kind==='putt'){const rem=hyp(pl.end.x-B.x,pl.end.z-B.z),D=Math.max(6,rem+4);return frameCam(B,fd,D,.32*D+4,.5*D+3,.3,.24)}
+  if(anim.kind==='flight'){const rem=hyp(pl.land.x-B.x,pl.land.z-B.z),D=Math.max(22,rem+12),g=frameCam(B,fd,D,.3*D+4,.2*D+3,.3,.22);g.y+=Math.max(0,B.y)*.6;return g}
+  const rem=hyp(pl.end.x-B.x,pl.end.z-B.z),D=Math.max(26,rem+18);return frameCam(B,fd,D,.32*D+6,.26*D+4,.32,.2)}
 function puttZoomCam(){const p=pinPt(),py=hAt(p.x,p.z)-.06,dx=p.x-cam.x,dz=p.z-cam.z,dh=hyp(dx,dz),h=norm(dx,dz),pitch=Math.atan2(cam.y-py,dh),d=Math.hypot(dh,cam.y-py);
   return{x:cam.x,y:cam.y,z:cam.z,hx:h[0],hz:h[1],pitch,F:Math.min((H/2)/Math.tan(.035),Math.max(cam.F,(H*.16)*d/(2*CUP_R)))}}
 function cupCam(){const p=pinPt(),u=hyp(anim.from.x-p.x,anim.from.z-p.z)>.05?norm(p.x-anim.from.x,p.z-anim.from.z):[cam.hx,cam.hz];return frameCam({x:p.x-u[0]*.5,z:p.z-u[1]*.5},u,.9,.7,.95,.3,.3)}
