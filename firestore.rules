@@ -23,12 +23,28 @@ service cloud.firestore {
 
     // Doughty's Links golf game leaderboard (golf/ folder).
     // Anyone can read the board and add a finished round; nobody can edit or delete rounds.
+    match /kfl_players/{playerId} {
+      allow read: if true;
+      allow create: if playerId.size() <= 20
+        && request.resource.data.keys().hasOnly(['n', 'k', 'd'])
+        && request.resource.data.n is string && request.resource.data.n.size() > 0 && request.resource.data.n.size() <= 16
+        && request.resource.data.k == request.resource.data.n.lower();
+      allow update, delete: if false;
+    }
+    match /kfl_keys/{playerId} {
+      allow get: if true;
+      allow list: if false;
+      allow create: if playerId.size() <= 20
+        && request.resource.data.keys().hasOnly(['h'])
+        && request.resource.data.h is string && request.resource.data.h.size() == 64;
+      allow update, delete: if false;
+    }
     match /kfl_courses/{courseId} {
       allow read: if true;
       allow create: if request.resource.data.keys().hasOnly(['name', 'by', 'd', 'theme', 'n', 'par', 'data'])
         && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 30
         && request.resource.data.by is string && request.resource.data.by.size() > 0 && request.resource.data.by.size() <= 16
-        && request.resource.data.theme in ['park', 'city']
+        && request.resource.data.theme in ['park', 'city', 'rail']
         && request.resource.data.n is int && request.resource.data.n >= 1 && request.resource.data.n <= 18
         && request.resource.data.par is int
         && request.resource.data.data is string && request.resource.data.data.size() <= 60000;
@@ -39,7 +55,7 @@ service cloud.firestore {
       allow create: if request.resource.data.keys().hasOnly(['n', 'c', 'd', 's', 'p', 'h', 'o', 'r', 'g'])
         && request.resource.data.n is string
         && request.resource.data.n.size() > 0 && request.resource.data.n.size() <= 16
-        && (request.resource.data.c in ['kf', 'mf', 'mb', 'm18', 'hr', 'pp', 'cy']
+        && (request.resource.data.c in ['kf', 'mf', 'mb', 'm18', 'hr', 'pp', 'cy', 'tr']
             || request.resource.data.c.matches('u_[A-Za-z0-9]{8,40}'))
         && request.resource.data.s is int && request.resource.data.s > 0 && request.resource.data.s < 200
         && request.resource.data.p is int
