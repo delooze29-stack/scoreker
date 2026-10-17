@@ -482,8 +482,8 @@ function ballTex(hex,opts){
 // ---- table ----
 function shapeFromPts(pts){const s=new THREE.Shape();pts.forEach((p,i)=>i?s.lineTo(p[0],p[1]):s.moveTo(p[0],p[1]));s.closePath();return s;}
 function extrudeUp(shape,height,mat,bevel){
-  const g=new THREE.ExtrudeGeometry(shape,{depth:height,bevelEnabled:!!bevel,bevelThickness:bevel||0,bevelSize:bevel||0,bevelSegments:2,curveSegments:24});
-  const m=new THREE.Mesh(g,mat);m.rotation.x=Math.PI/2;m.position.y=height;return m; // shape y -> world z, extruded downwards to y=0
+  const g=new THREE.ExtrudeGeometry(shape,{depth:height-(bevel||0)*2,bevelEnabled:!!bevel,bevelThickness:bevel||0,bevelSize:bevel||0,bevelOffset:-(bevel||0),bevelSegments:4,curveSegments:32});
+  const m=new THREE.Mesh(g,mat);m.rotation.x=Math.PI/2;m.position.y=height-(bevel||0);return m; // shape y -> world z, extruded downwards to y=0
 }
 function buildTable(){
   if(tableGroup){scene.remove(tableGroup);tableGroup.traverse(o=>{if(o.geometry)o.geometry.dispose();});}
@@ -534,7 +534,7 @@ function buildTable(){
     const d=axis==="y"?val-c.y:val-c.x, s=Math.sqrt(Math.max(0,c.r*c.r-d*d));
     return axis==="y"?[[c.x-s,val],[c.x+s,val]]:[[val,c.y-s],[val,c.y+s]];
   };
-  const cushMesh=sh=>{const m=extrudeUp(sh,ch,cushMat,0.003);m.castShadow=m.receiveShadow=true;tableGroup.add(m);};
+  const cushMesh=sh=>{const m=extrudeUp(sh,ch,cushMat,0.007);m.castShadow=m.receiveShadow=true;tableGroup.add(m);};
   // nA..nB is the nose on the playing edge, bA/bB the back ends at the pocket drops; the jaws curve round like real knuckles
   const knuckle=(nose,back,long)=>long?[back[0],nose[1]]:[nose[0],back[1]];
   const cushR=(nA,nB,bB,bA,long)=>{const sh=new THREE.Shape();sh.moveTo(bA[0],bA[1]);
@@ -578,7 +578,7 @@ function buildTable(){
   arcAround(inner,p0,e[1],s);
   inner.closePath();
   outer.holes.push(inner);
-  const rail=extrudeUp(outer,rh,woodMat,0.004);rail.castShadow=rail.receiveShadow=true;tableGroup.add(rail);
+  const rail=extrudeUp(outer,rh,woodMat,0.009);rail.castShadow=rail.receiveShadow=true;tableGroup.add(rail);
   // apron below the rail
   const apron=new THREE.Mesh(new THREE.BoxGeometry(l+2*ox,0.22,w+2*ox),new THREE.MeshStandardMaterial({color:0xffffff,map:woodTex(new THREE.Color(T.wood).multiplyScalar(.7).getHex()),roughness:.5}));
   apron.position.set(l/2,-0.112,w/2);tableGroup.add(apron);
@@ -594,15 +594,27 @@ function buildTable(){
   }
   // pocket drops: dark liner tube, net bottom, rim
   const linerMat=new THREE.MeshStandardMaterial({color:0x0b0806,roughness:1,envMapIntensity:0,side:THREE.DoubleSide});
+  const fallMat=new THREE.MeshStandardMaterial({color:0xffffff,map:clothTex(new THREE.Color(T.cloth).multiplyScalar(.55).getHex()),roughness:.95,envMapIntensity:0,side:THREE.DoubleSide});
+  const aoMat=new THREE.MeshBasicMaterial({transparent:true,depthWrite:false,map:canvasTex(128,128,(g,w,h)=>{
+    const gr=g.createRadialGradient(w/2,h/2,0,w/2,h/2,w/2);gr.addColorStop(0,"rgba(0,0,0,.75)");gr.addColorStop(.62,"rgba(0,0,0,.55)");gr.addColorStop(1,"rgba(0,0,0,0)");
+    g.fillStyle=gr;g.fillRect(0,0,w,h);})});
+  // soft contact shadow along the base of every cushion
+  const edgeMat=new THREE.MeshBasicMaterial({transparent:true,depthWrite:false,map:canvasTex(4,64,(g,w,h)=>{
+    const gr=g.createLinearGradient(0,0,0,h);gr.addColorStop(0,"rgba(0,0,0,.5)");gr.addColorStop(1,"rgba(0,0,0,0)");g.fillStyle=gr;g.fillRect(0,0,w,h);})});
+  [[l/2,0,l,0],[l/2,w,l,Math.PI],[0,w/2,w,Math.PI/2],[l,w/2,w,-Math.PI/2]].forEach(([x,z,ln,ry])=>{
+    const m=new THREE.Mesh(new THREE.PlaneGeometry(ln,0.04),edgeMat);m.rotation.set(-Math.PI/2,0,ry);
+    const off=0.02;m.position.set(x+(ry===Math.PI/2?off:ry===-Math.PI/2?-off:0),0.0012,z+(ry===0?off:ry===Math.PI?-off:0));tableGroup.add(m);});
   const lipMat=new THREE.MeshStandardMaterial({color:T.liner,roughness:.7,envMapIntensity:.2,side:THREE.DoubleSide});
-  const rimMat=new THREE.MeshStandardMaterial({color:state.table==="snooker"?0x3a2416:0x222222,roughness:.5,metalness:state.table==="snooker"?.1:.4});
+  const rimMat=new THREE.MeshStandardMaterial({color:state.table==="snooker"?0x2c1a0e:0x151515,roughness:state.table==="snooker"?.55:.35,metalness:.05,envMapIntensity:.6});
   pockets.forEach(pk=>{
     const c=to3(pk.hole,0), hr=pk.hr*MM;
-    const tube=new THREE.Mesh(new THREE.CylinderGeometry(hr,hr*0.92,0.16,32,1,true),linerMat);tube.position.set(c.x,-0.08+0.002,c.z);tableGroup.add(tube);
-    const bottom=new THREE.Mesh(new THREE.CircleGeometry(hr*0.92,32),new THREE.MeshBasicMaterial({color:0x050505}));bottom.rotation.x=-Math.PI/2;bottom.position.set(c.x,-0.158,c.z);tableGroup.add(bottom);
+    const fall=new THREE.Mesh(new THREE.CylinderGeometry(hr,hr*0.74,0.04,40,1,true),fallMat);fall.position.set(c.x,-0.02,c.z);tableGroup.add(fall);
+    const tube=new THREE.Mesh(new THREE.CylinderGeometry(hr*0.74,hr*0.7,0.18,32,1,true),linerMat);tube.position.set(c.x,-0.13,c.z);tableGroup.add(tube);
+    const bottom=new THREE.Mesh(new THREE.CircleGeometry(hr*0.7,32),new THREE.MeshBasicMaterial({color:0x030303}));bottom.rotation.x=-Math.PI/2;bottom.position.set(c.x,-0.218,c.z);tableGroup.add(bottom);
+    const ao=new THREE.Mesh(new THREE.PlaneGeometry((hr+0.04)*2,(hr+0.04)*2),aoMat);ao.rotation.x=-Math.PI/2;ao.position.set(c.x,0.0016,c.z);ao.renderOrder=1;tableGroup.add(ao);
     const wall=new THREE.Mesh(new THREE.CylinderGeometry(hr,hr,rh,32,1,true),linerMat);wall.position.set(c.x,rh/2,c.z);tableGroup.add(wall);
     const lip=new THREE.Mesh(new THREE.CylinderGeometry(hr+0.001,hr+0.001,0.012,32,1,true),lipMat);lip.position.set(c.x,rh-0.006,c.z);tableGroup.add(lip);
-    const rim=new THREE.Mesh(new THREE.TorusGeometry(hr+0.002,0.004,8,40),rimMat);rim.rotation.x=Math.PI/2;rim.position.set(c.x,rh+0.002,c.z);tableGroup.add(rim);
+    const plate=new THREE.Mesh(new THREE.TorusGeometry(hr+0.007,0.0095,12,48),rimMat);plate.rotation.x=Math.PI/2;plate.scale.z=0.42;plate.position.set(c.x,rh+0.0015,c.z);plate.castShadow=true;tableGroup.add(plate);
   });
 
   // room
@@ -612,7 +624,7 @@ function buildTable(){
   [[l/2,w/2-4.6,0],[l/2,w/2+4.6,Math.PI],[l/2-6.2,w/2,Math.PI/2],[l/2+6.2,w/2,-Math.PI/2]].forEach(([x,z,ry])=>{const m=new THREE.Mesh(new THREE.PlaneGeometry(13,4),wallMat);m.position.set(x,1.1,z);m.rotation.y=ry;tableGroup.add(m);});
 
   // target pocket marker
-  meshes.target=new THREE.Mesh(new THREE.RingGeometry(1,1.13,48),new THREE.MeshBasicMaterial({color:0xf5b700,side:THREE.DoubleSide,transparent:true,opacity:.95}));
+  meshes.target=new THREE.Mesh(new THREE.RingGeometry(1,1.07,48),new THREE.MeshBasicMaterial({color:0xf5b700,side:THREE.DoubleSide,transparent:true,opacity:.6}));
   meshes.target.rotation.x=-Math.PI/2;tableGroup.add(meshes.target);
   meshes.rh=rh;
 
@@ -780,7 +792,7 @@ function updateReadout(){
     $("rYou").textContent=t;$("rNeed").textContent=`cushion, then ${T.objName}`;$("rCut").textContent="–";return;
   }
   const u=phase==="aim"||!shotInfo?dirOf(aim):shotInfo.u, b=cross(u,sub(pos.O,pos.C)), hit=Math.abs(b)<2*T.R&&dot(u,sub(pos.O,pos.C))>0;
-  $("rYou").textContent=show?(hit?fracName(fracOf(b)):"missing"):"guides off";
+  $("rYou").textContent=hit?fracName(fracOf(b)):"missing";
   const nu=dirOf(neededAim().ang), nb=cross(nu,sub(pos.O,pos.C));
   const cut=deg(Math.acos(Math.max(-1,Math.min(1,dot(nu,unit(sub(pocketAim(pos.P),pos.O)))))));
   $("rNeed").textContent=show?fracName(fracOf(nb)):"guides off";
@@ -912,7 +924,7 @@ function frame(t){
   const dt=Math.min(.05,(t-last)/1000);last=t;camDt=dt;
   if(phase==="run"){for(let i=0;i<8;i++)step(balls,dt*1.2/8,liveRec);if(!moving(balls)){balls.forEach(b=>{b.v=V(0,0);b.extra=null;});finish();}}
   if(ok3d&&pos){updateDynamic(dt);placeCamera();renderer.render(scene,camera);}
-  insetEl.hidden=!!(pos&&(pos.esc||(state.mode==='test'&&!revealed)));
+  insetEl.hidden=!!(pos&&pos.esc);
   if(!insetEl.hidden)drawCueView();
   const ht=phase==="aim"?(state.cam==="behind"?"Drag ← → to aim":"Tap to point the cue"):phase==="done"?"Tap to retry":"";
   if(hintEl.textContent!==ht)hintEl.textContent=ht;hintEl.hidden=!ht;
