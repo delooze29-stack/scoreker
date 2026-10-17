@@ -685,7 +685,7 @@ function sceneRefresh(){
   meshes.block.visible=!!pos.B; if(pos.B&&phase==="aim")meshes.block.position.copy(to3(pos.B,r));
   if(pos.esc){meshes.target.visible=meshes.ghost.visible=meshes.ghostEdge.visible=meshes.potLine.visible=meshes.yours.visible=false;return;}
   const need=neededAim(), pk=pockets[pos.P];
-  meshes.target.visible=true;meshes.target.position.copy(to3(pk.hole,meshes.rh+0.008));meshes.target.scale.setScalar(pk.hr*MM+0.012);
+  meshes.target.visible=false; // target pocket is named under the controls insteadmeshes.target.position.copy(to3(pk.hole,meshes.rh+0.008));meshes.target.scale.setScalar(pk.hr*MM+0.012);
   meshes.ghost.visible=meshes.ghostEdge.visible=guides&&(phase==="aim"||phase==="done");
   meshes.ghost.position.copy(to3(need.G,r));meshes.ghostEdge.position.copy(meshes.ghost.position);
   meshes.potLine.visible=guides&&phase!=="run";
