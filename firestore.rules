@@ -1,7 +1,6 @@
 rules_version = '2';
 
 // ScoreKer Firestore rules.
-// Paste this whole file into Firebase console → Firestore Database → Rules → Publish.
 // Players: Mathew (delooze29@googlemail.com, also @gmail.com) and Gaz (claytongary@sky.com).
 
 service cloud.firestore {
@@ -64,7 +63,6 @@ service cloud.firestore {
     }
 
     // ScoreKer phone notifications: one document per phone that has them switched on.
-    // Readable so the reminder job (GitHub Action) can send to it; only the owner can add or remove it.
     match /push/{deviceId} {
       allow read: if true;
       allow create, update: if isPlayer() && request.resource.data.email == me()
@@ -75,7 +73,6 @@ service cloud.firestore {
     match /weeks/{weekId} {
       function wk() { return get(/databases/$(database)/documents/weeks/$(weekId)).data; }
 
-      // Lock times for the weekend, created once from the published fixtures
       allow read: if isPlayer();
       allow create: if isPlayer()
         && request.resource.data.keys().hasOnly(['redKickoff', 'freeLock'])
@@ -83,16 +80,12 @@ service cloud.firestore {
         && request.resource.data.freeLock is timestamp;
       allow update, delete: if false;
 
-      // Main predictions (red, clearance, tie-break): hidden from the other player
-      // until the red kicks off, and locked from then on
       match /preds/{email} {
         allow read: if isPlayer() && (email == me() || request.time >= wk().redKickoff);
         allow create, update: if isPlayer() && email == me() && request.time < wk().redKickoff;
         allow delete: if false;
       }
 
-      // Free colour pick + its score: can be set or changed until the free-colour
-      // games kick off, and stays hidden from the other player until then
       match /free/{email} {
         allow read: if isPlayer() && (email == me() || request.time >= wk().freeLock);
         allow create, update: if isPlayer() && email == me() && request.time < wk().freeLock
@@ -100,8 +93,6 @@ service cloud.firestore {
         allow delete: if false;
       }
 
-      // "Locked in" flags (counts only, never scores). Readable by anyone so the
-      // reminder emails (GitHub Action) can see who still needs to enter.
       match /status/{email} {
         allow read: if true;
         allow write: if isPlayer() && email == me();
