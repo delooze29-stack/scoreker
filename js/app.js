@@ -5,9 +5,9 @@ import {
   sendEmailVerification, sendPasswordResetEmail,
 } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 import {
-  getFirestore, doc, getDoc, setDoc, updateDoc, Timestamp, serverTimestamp,
+  getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, Timestamp, serverTimestamp,
 } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
-import { firebaseConfig, PLAYERS, HIGH_BREAK_BONUS } from './config.js';
+import { firebaseConfig, PLAYERS, HIGH_BREAK_BONUS, VAPID_PUBLIC_KEY } from './config.js';
 import { scoreBreak, decideFrame, COLOURS, VALUE } from './scoring.js';
 
 const fb = initializeApp(firebaseConfig);
@@ -212,6 +212,85 @@ function pickFree(colour) {
   render();
 }
 
+// ---------- phone notifications ----------
+const PUSH = {
+  supported: 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window,
+  on: false, busy: false,
+};
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch((e) => console.warn('sw', e));
+
+function keyBytes(b64) {
+  const s = atob((b64 + '='.repeat((4 - (b64.length % 4)) % 4)).replace(/-/g, '+').replace(/_/g, '/'));
+  return Uint8Array.from(s, (c) => c.charCodeAt(0));
+}
+async function deviceId(sub) {
+  const h = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(sub.endpoint));
+  return [...new Uint8Array(h)].slice(0, 20).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+async function saveSub(sub) {
+  await setDoc(doc(db, 'push', await deviceId(sub)), {
+    email: emailOf(S.me), sub: JSON.stringify(sub), ua: navigator.userAgent.slice(0, 120), at: serverTimestamp(),
+  });
+}
+async function checkPush() {
+  if (!PUSH.supported || Notification.permission !== 'granted') { PUSH.on = false; return; }
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    PUSH.on = !!sub;
+    if (sub) saveSub(sub).catch((e) => console.warn('push save', e));
+  } catch (e) { console.warn(e); }
+}
+async function enablePush() {
+  if (PUSH.busy) return;
+  PUSH.busy = true; render();
+  try {
+    const perm = await Notification.requestPermission();
+    if (perm !== 'granted') { toast('Notifications are blocked — allow them in your settings'); return; }
+    const reg = await navigator.serviceWorker.ready;
+    const sub = (await reg.pushManager.getSubscription())
+      || (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(VAPID_PUBLIC_KEY) }));
+    await saveSub(sub);
+    PUSH.on = true;
+    toast('Notifications on ✓');
+  } catch (e) {
+    console.error(e); toast('Could not turn on notifications');
+  } finally { PUSH.busy = false; render(); }
+}
+async function disablePush() {
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (sub) { const id = await deviceId(sub); await sub.unsubscribe(); await deleteDoc(doc(db, 'push', id)).catch(() => {}); }
+    PUSH.on = false; toast('Notifications off');
+  } catch (e) { console.error(e); }
+  render();
+}
+const pushDismissed = () => { try { return localStorage.getItem('skPushLater') === '1'; } catch { return false; } };
+
+function pushCard(where) {
+  if (PUSH.on) {
+    return where === 'rules'
+      ? `<div class="note"><b>Notifications are on for this phone ✓</b><p>You'll get a nudge if you haven't entered, and a full-time alert when the frame finishes.</p><button class="linkbtn" id="pushoff" style="align-self:flex-start">Turn off</button></div>`
+      : '';
+  }
+  if (where === 'frame' && pushDismissed()) return '';
+  const later = where === 'frame' ? `<button class="linkbtn" id="pushlater" style="align-self:center">Not now</button>` : '';
+  if (!PUSH.supported) {
+    if (isIOS && !standalone) {
+      return `<div class="note"><b>Get reminders on your iPhone</b><p>Tap the Share button <span aria-hidden="true">⎙</span> then <b>Add to Home Screen</b>. Open ScoreKer from the new icon and you'll be able to turn notifications on.</p>${later}</div>`;
+    }
+    return where === 'rules' ? `<div class="note"><b>Notifications</b><p>This browser can't show notifications. Try Chrome on Android, or Add to Home Screen on iPhone.</p></div>` : '';
+  }
+  if (Notification.permission === 'denied') {
+    return `<div class="note"><b>Notifications are blocked</b><p>Allow notifications for ScoreKer in your phone or browser settings, then come back here.</p>${later}</div>`;
+  }
+  return `<div class="note"><b>Get reminders on this phone</b><p>A nudge if you haven't entered before the red or picked your free colour, and a full-time alert when the frame finishes.</p>
+    <button class="primary" id="pushon" style="min-height:46px;font-size:15px" ${PUSH.busy ? 'disabled' : ''}>${PUSH.busy ? 'Turning on…' : 'Turn on notifications'}</button>${later}</div>`;
+}
+
 // ---------- views ----------
 function renderLogin(err, info) {
   $app.innerHTML = `
@@ -410,6 +489,7 @@ function renderFrame() {
       <div class="scores">${scoreCell(0)}${scoreCell(1)}</div>
       ${result ? `<div class="result">${result}</div>` : ''}
     </section>
+    ${pushCard('frame')}
     ${seg}${body}
     ${S.week.notes && S.week.notes.length ? `<p class="small muted" style="margin:14px 16px 0">${S.week.notes.map(esc).join(' ')}</p>` : ''}
     <p class="small muted" style="margin:14px 16px 0;line-height:1.5">Level on points? Most exact scores wins. Still level: re-spotted black on ${S.week.tiebreak ? `${esc(S.week.tiebreak.home)} v ${esc(S.week.tiebreak.away)}` : 'the late game'}. Level again: frame drawn.</p>`;
@@ -537,6 +617,7 @@ function renderRules() {
       <li>Highest score wins the frame (1 point). Level: most exact scores, then the tie-break game. Still level: frame drawn.</li>
       <li>Highest break of the season wins a prize and ${HIGH_BREAK_BONUS} bonus frames.</li>
     </ol></section>
+    ${pushCard('rules')}
     <p class="small muted" style="margin:16px">Signed in as ${esc(S.user.email)}</p>`;
 }
 
@@ -567,6 +648,9 @@ function bind() {
   }));
   const save = document.getElementById('save'); if (save) save.onclick = savePreds;
   const so = document.getElementById('signout'); if (so) so.onclick = () => signOut(auth);
+  const pon = document.getElementById('pushon'); if (pon) pon.onclick = enablePush;
+  const poff = document.getElementById('pushoff'); if (poff) poff.onclick = disablePush;
+  const pl = document.getElementById('pushlater'); if (pl) pl.onclick = () => { try { localStorage.setItem('skPushLater', '1'); } catch {} render(); };
 }
 
 // ---------- start ----------
@@ -590,6 +674,7 @@ async function start(user) {
   if (S.me < 0) { renderNotPlayer(); return; }
   if (!user.emailVerified) { renderVerify(); return; }
   S.showPlayer = S.me;
+  await checkPush();
   await refresh();
   loadSeason();
 }

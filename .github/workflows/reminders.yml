@@ -4,10 +4,11 @@ on:
   schedule:
     # Every hour, Friday to Sunday (UTC). The script decides whether a reminder is due.
     - cron: '15 * * * 5,6,0'
+    - cron: '15 9 * * 1'          # Monday morning: full-time alert if the last result came in late
   workflow_dispatch:
     inputs:
       test:
-        description: 'Just send a test email to Mathew'
+        description: 'Just send a test notification / email to Mathew'
         required: false
         default: true
         type: boolean
@@ -29,13 +30,14 @@ jobs:
         with:
           node-version: '24'
 
-      - name: Install mailer
-        run: npm install --no-save --no-package-lock --silent nodemailer@6
+      - name: Install mail and push libraries
+        run: npm install --no-save --no-package-lock --silent nodemailer@6 web-push@3
 
       - name: Send reminders
         env:
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
           TEST: ${{ github.event_name == 'workflow_dispatch' && inputs.test && '1' || '0' }}
         run: node scripts/remind.mjs
 

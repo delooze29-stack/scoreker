@@ -63,6 +63,15 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // ScoreKer phone notifications: one document per phone that has them switched on.
+    // Readable so the reminder job (GitHub Action) can send to it; only the owner can add or remove it.
+    match /push/{deviceId} {
+      allow read: if true;
+      allow create, update: if isPlayer() && request.resource.data.email == me()
+        && request.resource.data.keys().hasOnly(['email', 'sub', 'ua', 'at']);
+      allow delete: if isPlayer() && resource.data.email == me();
+    }
+
     match /weeks/{weekId} {
       function wk() { return get(/databases/$(database)/documents/weeks/$(weekId)).data; }
 

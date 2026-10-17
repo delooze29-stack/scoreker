@@ -21,3 +21,7 @@ export const PLAYERS = [
 
 // 3. Bonus frames for the season's highest break.
 export const HIGH_BREAK_BONUS = 5;
+
+// 4. Phone notifications: public half of the push key (the private half is the
+//    VAPID_PRIVATE_KEY secret in GitHub). Safe to be public.
+export const VAPID_PUBLIC_KEY = 'BA1JY8tlbHn7EBP2_mxlc6GHWsbC-o17AhpUwvteb5SSYLbZXo6aFvfHtaR4pban_kKCEDW_jok86M1Wz_zOgOg';
