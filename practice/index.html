@@ -750,10 +750,11 @@ function placeCamera(){
     if(follow&&(phase==="run"||phase==="done")){
       // ride behind the white until it makes contact, then swing round to follow the object ball
       const tb=liveRec&&liveRec.first?balls.find(b=>b.kind===liveRec.first)||balls[1]:balls[0];
-      if(!tb.in&&len(tb.v)>40){const k=1-Math.exp(-camDt*4);follow.dir=unit(add(mul(follow.dir,1-k),mul(unit(tb.v),k)));}
-      const at=tb.in?pockets[tb.pocket].hole:tb.p, d=follow.dir;
-      camTo(to3(sub(at,mul(d,650)),0.30),to3(add(at,mul(d,500)),0),new THREE.Vector3(0,1,0),3.2);
-      camera.setViewOffset(w,h,0,Math.round(h*0.12),w,h);
+      // stay down where you played from and just turn left/right to keep the ball in view
+      const at=tb.in?pockets[tb.pocket].hole:tb.p, u0=dirOf(shotCam.aim), eye=sub(pos.C,mul(u0,T.R*13));
+      const d=unit(sub(at,eye)), dist=Math.max(len(sub(at,eye)),600);
+      camTo(to3(eye,T.R*5.2*MM),to3(add(eye,mul(d,dist+500)),0),new THREE.Vector3(0,1,0),4);
+      camera.setViewOffset(w,h,0,Math.round(h*0.2),w,h);
       camera.updateProjectionMatrix();return;
     }
     const u=dirOf(phase==="aim"?aim:(shotCam?shotCam.aim:aim)), C=pos.C;
