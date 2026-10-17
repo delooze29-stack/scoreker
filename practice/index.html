@@ -94,7 +94,7 @@ button,input{font:inherit}
 @media (max-width:560px){.settings{grid-template-columns:minmax(0,1fr)}}
 .seg{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;background:var(--bg);border:1px solid var(--line2);border-radius:8px;padding:3px;gap:3px;margin-top:5px}
 .seg button{appearance:none;border:0;background:none;color:var(--muted);font-size:13px;font-weight:600;padding:8px 4px;border-radius:6px;cursor:pointer}
-.seg button[aria-pressed="true"]{background:var(--card2);color:var(--text);box-shadow:inset 0 0 0 1px var(--line2)}
+.seg button[aria-pressed="true"]{background:var(--amber);color:var(--amber-ink)}
 
 /* learn */
 .ref{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px}
@@ -287,7 +287,7 @@ function newPosition(){
 }
 function resetShot(){
   balls=freshBalls();
-  phase="aim";revealed=false;shotInfo=null;shotCam=null;predKey="";
+  phase="aim";revealed=false;shotInfo=null;shotCam=null;predKey="";follow=null;
   aim=Math.atan2(pos.O.y-pos.C.y,pos.O.x-pos.C.x);
   ui.shoot.disabled=false;
   if(meshes.cue)[meshes.cue,meshes.obj,meshes.block].forEach(m=>m.quaternion.identity());
@@ -364,6 +364,7 @@ function shoot(){
   shotCam={aim};phase="stroke";cueAnim=0;ui.shoot.disabled=true;
 }
 function strike(){
+  follow={dir:shotInfo.u};
   balls[0].v=mul(shotInfo.u,speedOf(+ui.pw.value/100));balls[0].side=spin.x;balls[0].follow=spin.y;liveRec=newRec();
   phase="run";revealed=true;updateReadout();sceneRefresh();
 }
@@ -703,10 +704,10 @@ function updateDynamic(dt){
 
 // camera: eases toward its target so aiming feels smooth
 const camState={pos:null,look:new THREE.Vector3(),up:new THREE.Vector3(0,1,0),mode:null};
-let camDt=0;
-function camTo(p,look,up){
+let camDt=0, follow=null;
+function camTo(p,look,up,rate){
   if(!camState.pos||camState.mode!==state.cam){camState.pos=p.clone();camState.look.copy(look);camState.up.copy(up);camState.mode=state.cam;}
-  else{const k=1-Math.exp(-camDt*22);camState.pos.lerp(p,k);camState.look.lerp(look,k);camState.up.lerp(up,k).normalize();}
+  else{const k=1-Math.exp(-camDt*(rate||22));camState.pos.lerp(p,k);camState.look.lerp(look,k);camState.up.lerp(up,k).normalize();}
   camera.position.copy(camState.pos);camera.up.copy(camState.up);camera.lookAt(camState.look);
 }
 function placeCamera(){
@@ -715,6 +716,15 @@ function placeCamera(){
   meshes.canopy.forEach(m=>m.visible=state.cam==="behind");
   if(state.cam==="behind"){
     camera.fov=host.clientWidth<host.clientHeight?40:44;
+    if(follow&&(phase==="run"||phase==="done")){
+      // ride behind the white until it makes contact, then swing round to follow the object ball
+      const tb=liveRec&&liveRec.first?balls.find(b=>b.kind===liveRec.first)||balls[1]:balls[0];
+      if(!tb.in&&len(tb.v)>40){const k=1-Math.exp(-camDt*4);follow.dir=unit(add(mul(follow.dir,1-k),mul(unit(tb.v),k)));}
+      const at=tb.in?pockets[tb.pocket].hole:tb.p, d=follow.dir;
+      camTo(to3(sub(at,mul(d,650)),0.30),to3(add(at,mul(d,500)),0),new THREE.Vector3(0,1,0),3.2);
+      camera.setViewOffset(w,h,0,Math.round(h*0.12),w,h);
+      camera.updateProjectionMatrix();return;
+    }
     const u=dirOf(phase==="aim"?aim:(shotCam?shotCam.aim:aim)), C=pos.C;
     camTo(to3(sub(C,mul(u,T.R*13)),T.R*5.2*MM),to3(add(C,mul(u,1100)),0),new THREE.Vector3(0,1,0));
     camera.setViewOffset(w,h,0,Math.round(h*0.2),w,h);
@@ -769,8 +779,8 @@ function updateReadout(){
     if(show&&rc)t=rc.first==="block"?"hits blue first":!rc.first?"misses":rc.cushBefore<1?"direct, no cushion":`${rc.cushBefore} cush, ${fracShort(fracOf(rc.firstB))}`;
     $("rYou").textContent=t;$("rNeed").textContent=`cushion, then ${T.objName}`;$("rCut").textContent="–";return;
   }
-  const u=dirOf(aim), b=cross(u,sub(pos.O,pos.C)), hit=Math.abs(b)<2*T.R&&dot(u,sub(pos.O,pos.C))>0;
-  $("rYou").textContent=hit?fracName(fracOf(b)):"missing";
+  const u=phase==="aim"||!shotInfo?dirOf(aim):shotInfo.u, b=cross(u,sub(pos.O,pos.C)), hit=Math.abs(b)<2*T.R&&dot(u,sub(pos.O,pos.C))>0;
+  $("rYou").textContent=show?(hit?fracName(fracOf(b)):"missing"):"guides off";
   const nu=dirOf(neededAim().ang), nb=cross(nu,sub(pos.O,pos.C));
   const cut=deg(Math.acos(Math.max(-1,Math.min(1,dot(nu,unit(sub(pocketAim(pos.P),pos.O)))))));
   $("rNeed").textContent=show?fracName(fracOf(nb)):"guides off";
@@ -902,7 +912,7 @@ function frame(t){
   const dt=Math.min(.05,(t-last)/1000);last=t;camDt=dt;
   if(phase==="run"){for(let i=0;i<8;i++)step(balls,dt*1.2/8,liveRec);if(!moving(balls)){balls.forEach(b=>{b.v=V(0,0);b.extra=null;});finish();}}
   if(ok3d&&pos){updateDynamic(dt);placeCamera();renderer.render(scene,camera);}
-  insetEl.hidden=!!(pos&&pos.esc);
+  insetEl.hidden=!!(pos&&(pos.esc||(state.mode==='test'&&!revealed)));
   if(!insetEl.hidden)drawCueView();
   const ht=phase==="aim"?(state.cam==="behind"?"Drag ← → to aim":"Tap to point the cue"):phase==="done"?"Tap to retry":"";
   if(hintEl.textContent!==ht)hintEl.textContent=ht;hintEl.hidden=!ht;
