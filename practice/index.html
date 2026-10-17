@@ -80,6 +80,11 @@ button,input{font:inherit}
 .power{display:flex;align-items:center;gap:8px}
 .power input{flex:1;min-width:0;accent-color:var(--amber)}
 .power output{font-family:var(--mono);font-size:13px;width:3.2em;text-align:right}
+.pkrow{display:grid;grid-template-columns:44px minmax(0,1fr) 44px;gap:6px;align-items:center}
+.pkrow .btn{padding:8px 0;font-size:18px}
+.pkname{text-align:center;font-size:13px;line-height:1.25;min-width:0}
+.pkname b{display:block;font-size:14px}
+.pkname span{color:var(--muted);font-size:12px}
 .row3{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
 .row3 .btn{font-size:13px}
 #result{min-height:72px;font-size:14px;color:var(--soft)}
@@ -151,6 +156,11 @@ button,input{font:inherit}
             <button class="btn primary" id="shoot">Shoot</button>
           </div>
         </div>
+        <div class="pkrow" id="pkRow">
+          <button class="btn" id="pkPrev" aria-label="Previous pocket">‹</button>
+          <div class="pkname" aria-live="polite"><b id="pkName">–</b><span id="pkSub">Tap a pocket on the table to choose it</span></div>
+          <button class="btn" id="pkNext" aria-label="Next pocket">›</button>
+        </div>
         <div class="row3">
           <button class="btn" id="retry">Retry</button>
           <button class="btn" id="next">New shot</button>
@@ -207,7 +217,7 @@ const TABLES={
     obj:0xc8141c,blk:0xf2c200,objName:"red",objCss:"#d0202a",objHi:"#ff7a6a",cloth:0x1b6b3c,wood:0x3b2416,liner:0x161616,numbers:false,diamonds:false,rail:0.10}
 };
 const DRILLS=[
-  {id:"mix",name:"Mixed",min:0,max:68},
+  {id:"mix",name:"Mixed",min:0,max:60},
   {id:"straight",name:"Near straight",min:0,max:8},
   {id:"q3",name:"¾ ball",min:10,max:20},
   {id:"half",name:"½ ball",min:25,max:35},
@@ -789,7 +799,39 @@ function drawCueView(){
 // ================= UI =================
 const $=id=>document.getElementById(id);
 const ui={pw:$("pw"),pwOut:$("pwOut"),shoot:$("shoot"),result:$("result")};
+// ---- choosing the pocket ----
+function potInfo(P){ // can the object ball go in pocket P from here, and what cut does it need?
+  const pk=pockets[P], PA=pocketAim(P), dir=unit(sub(PA,pos.O));
+  if(!pk.corner&&Math.abs(dot(dir,pk.n))<Math.cos(rad(55)))return null; // too flat into a middle
+  const G=sub(pos.O,mul(dir,2*T.R)), toG=sub(G,pos.C);
+  if(len(toG)<T.R*2.2)return null;
+  const cut=deg(Math.acos(Math.max(-1,Math.min(1,dot(unit(toG),dir)))));
+  if(cut>78)return null;
+  return {cut,G};
+}
+function pocketLabel(P){
+  const pk=pockets[P], at=pk.hole, d=sub(at,pos.C), u=dirOf(Math.atan2(pos.O.y-pos.C.y,pos.O.x-pos.C.x));
+  const side=cross(u,d)>0?"right":"left", ahead=dot(u,d)>0;
+  return `${pk.corner?"Corner":"Middle"} pocket, ${ahead?"":"behind you, "}${side}`;
+}
+function setPocket(P,announce){
+  const info=potInfo(P); if(!info)return false;
+  pos.P=P;predKey="";updateReadout();sceneRefresh();
+  if(announce)msg(`Target: ${pocketLabel(P).toLowerCase()}.${state.mode==="practice"?` It needs a ${info.cut.toFixed(0)}° cut.`:""}`);
+  return true;
+}
+function stepPocket(dir){
+  if(!pos||pos.esc||phase!=="aim")return;
+  for(let k=1;k<=6;k++){const P=(pos.P+dir*k+60)%6;if(setPocket(P,true))return;}
+}
+function renderPocket(){
+  const row=$("pkRow"); row.hidden=!pos||!!pos.esc; if(row.hidden)return;
+  const info=potInfo(pos.P);
+  $("pkName").textContent=pocketLabel(pos.P);
+  $("pkSub").textContent=(state.mode==="practice"&&info?`${info.cut.toFixed(0)}° cut · `:"")+"tap a pocket to change";
+}
 function updateReadout(){
+  renderPocket();
   if(!pos)return;
   const show=state.mode==="practice"||revealed;
   const drill=(DRILLS.find(d=>d.id===state.drill)||DRILLS[0]).name;
@@ -832,6 +874,8 @@ const nudge=d=>{if(phase!=="aim")return;aim+=rad(d);updateReadout();};
 });
 ui.pw.oninput=()=>ui.pwOut.textContent=ui.pw.value+"%";
 ui.shoot.onclick=shoot;
+$("pkPrev").onclick=()=>stepPocket(-1);
+$("pkNext").onclick=()=>stepPocket(1);
 $("retry").onclick=()=>{resetShot();msg("Same position. Try again.");};
 $("next").onclick=()=>{newPosition();msg(pos.esc?`New escape. Find a way off a cushion onto the ${T.objName}.`:"New position. Find the contact.");};
 function wrapDeg(d){while(d>180)d-=360;while(d<-180)d+=360;return d;}
@@ -869,6 +913,7 @@ $("reveal").onclick=()=>{
 // aim: relative drag behind the ball, point-to-aim overhead
 let drag=null;
 host.addEventListener("pointerdown",e=>{
+  tapStart={x:e.clientX,y:e.clientY,t:performance.now(),a:aim};
   if(phase==="done"){resetShot();msg("Same position. Aim again.");return;}
   if(phase!=="aim")return;
   drag={x:e.clientX,a:aim};try{host.setPointerCapture(e.pointerId);}catch(_){}
@@ -879,8 +924,20 @@ host.addEventListener("pointermove",e=>{
   if(state.cam==="behind"){aim=drag.a+rad((e.clientX-drag.x)*(e.shiftKey?0.02:0.08));updateReadout();}
   else pointAt(e);
 });
+let tapStart=null;
 const endDrag=()=>drag=null;
-host.addEventListener("pointerup",endDrag);host.addEventListener("pointercancel",endDrag);
+host.addEventListener("pointerup",e=>{
+  drag=null;
+  // a quick tap (not a drag) near a pocket picks that pocket as the target
+  if(tapStart&&phase==="aim"&&pos&&!pos.esc&&Math.hypot(e.clientX-tapStart.x,e.clientY-tapStart.y)<8&&performance.now()-tapStart.t<400){
+    const r=host.getBoundingClientRect();ray.setFromCamera({x:(e.clientX-r.left)/r.width*2-1,y:-(e.clientY-r.top)/r.height*2+1},camera);
+    let best=null;
+    for(const y of [0,meshes.rh]){const pt=new THREE.Vector3();if(!ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0,1,0),-y),pt))continue;
+      pockets.forEach((pk,i)=>{const d=Math.hypot(pt.x-pk.hole.x*MM,pt.z-pk.hole.y*MM);if(d<pk.hr*MM+0.09&&(!best||d<best.d))best={i,d};});}
+    if(best){aim=tapStart.a;if(!setPocket(best.i,true))msg("You can't pot it in that pocket from here. Pick another.");}
+  }
+  tapStart=null;
+});host.addEventListener("pointercancel",endDrag);
 const ray=new THREE.Raycaster();
 function pointAt(e){
   const r=host.getBoundingClientRect();ray.setFromCamera({x:(e.clientX-r.left)/r.width*2-1,y:-(e.clientY-r.top)/r.height*2+1},camera);
