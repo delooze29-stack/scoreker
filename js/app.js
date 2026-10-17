@@ -379,7 +379,7 @@ function header(title, sub) {
 
 function nav() {
   const b = (v, l) => `<button data-nav="${v}" ${S.view === v ? 'aria-current="page"' : ''}>${l}</button>`;
-  return `<nav class="bottom" aria-label="Sections"><div class="in">${b('frame', 'Frame')}${b('predict', 'Predict')}${b('season', 'Season')}${b('rules', 'Rules')}</div></nav>`;
+  return `<nav class="bottom" aria-label="Sections"><div class="in">${b('frame', 'Frame')}${b('predict', 'Predict')}${b('season', 'Season')}${b('rules', 'Rules')}<a class="navlink" href="practice/">Practice</a></div></nav>`;
 }
 
 function weekSub() {

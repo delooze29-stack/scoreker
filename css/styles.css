@@ -135,8 +135,10 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 14px; background:
 
 /* nav */
 nav.bottom { position: fixed; left: 0; right: 0; bottom: 0; background: #0E1712; border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); z-index: 5; }
-nav.bottom .in { max-width: 520px; margin: 0 auto; display: grid; grid-template-columns: repeat(4, 1fr); }
+nav.bottom .in { max-width: 520px; margin: 0 auto; display: grid; grid-template-columns: repeat(5, 1fr); }
 nav.bottom button { background: none; border: 0; border-top: 2px solid transparent; padding: 14px 0; font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer; min-height: 52px; }
+nav.bottom a.navlink { display: flex; align-items: center; justify-content: center; border-top: 2px solid transparent; padding: 14px 0; font-size: 13px; font-weight: 600; color: var(--muted); text-decoration: none; min-height: 52px; }
+nav.bottom a.navlink:hover { color: var(--text); }
 nav.bottom button[aria-current="page"] { color: var(--amber); border-top-color: var(--amber); font-weight: 700; }
 
 .login { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 16px; padding: 24px; text-align: center; }

@@ -34,6 +34,10 @@ Weekend football predictions for two players, played as a frame of snooker.
 
 Roughly 10–40 API credits a week, well under the free 500 a month. You can also run the workflow by hand from the Actions tab.
 
+## Practice table
+
+`practice/` is a standalone 3D snooker and pool practice table, linked from the **Practice** tab in the bottom menu. It teaches cue ball contact (ghost ball, view down the cue, overlap check), spin and cushion escapes. It runs entirely in the browser: no login, no Firebase, nothing saved.
+
 ## Doughty's Links (golf game) leaderboard
 
 The golf game lives in its own repo, Doughty-Links (https://delooze29-stack.github.io/Doughty-Links/), but its leaderboard saves rounds to this Firebase project in the `kfl_rounds` collection. Keep the `kfl_rounds` block in `firestore.rules`.
