@@ -91,9 +91,10 @@ service cloud.firestore {
         allow delete: if false;
       }
 
-      // "Locked in" flags, so each of you can see the other has entered (but not what)
+      // "Locked in" flags (counts only, never scores). Readable by anyone so the
+      // reminder emails (GitHub Action) can see who still needs to enter.
       match /status/{email} {
-        allow read: if isPlayer();
+        allow read: if true;
         allow write: if isPlayer() && email == me();
       }
     }

@@ -37,3 +37,7 @@ Roughly 10–40 API credits a week, well under the free 500 a month. You can als
 ## Doughty's Links (golf game) leaderboard
 
 The golf game lives in its own repo, Doughty-Links (https://delooze29-stack.github.io/Doughty-Links/), but its leaderboard saves rounds to this Firebase project in the `kfl_rounds` collection. Keep the `kfl_rounds` block in `firestore.rules`.
+
+## Reminder emails
+
+`.github/workflows/reminders.yml` runs hourly Friday–Sunday and emails a player who hasn't entered: the evening before the red, in the 3 hours before the red, and (free colour only) in the 2 hours before the free-colour games. Sent from Gmail using the `GMAIL_APP_PASSWORD` secret (a Google app password). Run it by hand with "test" ticked to send yourself a test email.

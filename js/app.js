@@ -176,7 +176,8 @@ const full = (p) => Array.isArray(p) && p.length === 2 && p.every(Number.isInteg
 function filledCount() {
   const m = mainGames(S.week).filter((g) => full(S.draft.scores[g.id])).length;
   const f = S.draft.free.colour && full(S.draft.free.score) ? 1 : 0;
-  return { filled: m + f, total: mainGames(S.week).length + 1 };
+  const total = mainGames(S.week).length + 1;
+  return { filled: m + f, total, main: m === total - 1, free: f === 1 };
 }
 
 async function savePreds() {
@@ -195,8 +196,8 @@ async function savePreds() {
       const g = S.week.free.find((x) => x.colour === fr.colour);
       await setDoc(doc(db, 'weeks', id, 'free', emailOf(S.me)), { colour: fr.colour, gameId: g.id, score: fr.score, updatedAt: serverTimestamp() });
     }
-    const { filled, total } = filledCount();
-    await setDoc(doc(db, 'weeks', id, 'status', emailOf(S.me)), { filled, total, at: serverTimestamp() });
+    const { filled, total, main, free } = filledCount();
+    await setDoc(doc(db, 'weeks', id, 'status', emailOf(S.me)), { filled, total, main, free, at: serverTimestamp() });
     const keep = S.draft; await loadPreds(); S.draft = keep;
     toast(filled === total ? 'Locked in ✓' : `Saved ${filled}/${total}`);
   } catch (e) {

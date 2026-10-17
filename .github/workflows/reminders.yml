@@ -1,0 +1,51 @@
+name: ScoreKer reminders
+
+on:
+  schedule:
+    # Every hour, Friday to Sunday (UTC). The script decides whether a reminder is due.
+    - cron: '15 * * * 5,6,0'
+  workflow_dispatch:
+    inputs:
+      test:
+        description: 'Just send a test email to Mathew'
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: scoreker-data
+  cancel-in-progress: false
+
+jobs:
+  remind:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+
+      - name: Install mailer
+        run: npm install --no-save --no-package-lock --silent nodemailer@6
+
+      - name: Send reminders
+        env:
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          TEST: ${{ github.event_name == 'workflow_dispatch' && inputs.test && '1' || '0' }}
+        run: node scripts/remind.mjs
+
+      - name: Remember who was emailed
+        run: |
+          if [ -n "$(git status --porcelain data)" ]; then
+            git config user.name "scoreker-bot"
+            git config user.email "scoreker-bot@users.noreply.github.com"
+            git add data
+            git commit -m "Reminders sent"
+            git pull --rebase
+            git push
+          fi
