@@ -47,7 +47,7 @@ button,input{font:inherit}
 :focus-visible{outline:2px solid var(--amber);outline-offset:2px}
 
 .stage{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:14px;align-items:start}
-@media (max-width:880px){.stage{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:880px),(pointer:coarse){.stage{grid-template-columns:minmax(0,1fr)}}
 
 /* 3D view */
 #view3d{position:relative;width:100%;border-radius:12px;overflow:hidden;background:#050806;touch-action:none;cursor:ew-resize;border:1px solid var(--line);user-select:none;-webkit-user-select:none}
@@ -161,7 +161,7 @@ button,input{font:inherit}
       <div class="card">
         <dl class="readout">
           <dt>Your contact</dt><dd id="rYou">–</dd>
-          <dt>Needed</dt><dd id="rNeed">hidden</dd>
+          <dt>Needed</dt><dd id="rNeed">–</dd>
           <dt>Cut angle</dt><dd id="rCut">hidden</dd>
           <dt>Spin</dt><dd id="rSpin">centre</dd>
         </dl>
@@ -237,7 +237,7 @@ function buildPockets(){
     {p:V(L/2,-R*midOff),cap:midCap,corner:false,n:V(0,-1),out:V(0,-1)},{p:V(L/2,W+R*midOff),cap:midCap,corner:false,n:V(0,1),out:V(0,1)}
   ];
   // where the drop is drawn: a little behind the capture point
-  pockets.forEach(pk=>{pk.hole=add(pk.p,mul(pk.out,pk.cap*(pk.corner?0.32:0.28)));pk.hr=pk.cap*(pk.corner?1.08:1.0);});
+  pockets.forEach(pk=>{pk.hole=pk.corner?add(pk.p,mul(pk.out,pk.cap*0.5)):V(pk.p.x,pk.out.y<0?-36:T.W+36);pk.hr=pk.cap*(pk.corner?1.08:0.96);});
 }
 function pocketAim(i){const pk=pockets[i];if(!pk.corner)return pk.p;return add(pk.p,mul(unit(sub(V(T.L/2,T.W/2),pk.p)),T.R*0.5));}
 function contactFor(C,u,O){
@@ -385,6 +385,7 @@ function finish(){
     else if(rec.cushBefore<1)lines.push(`You hit the ${T.objName} direct. This drill needs a cushion first.`);
     else lines.push(`Off ${rec.cushBefore} cushion${rec.cushBefore>1?"s":""}, you caught the ${T.objName} ${fracShort(fracOf(rec.firstB))}.`);
     if(inOff)lines.push(`The cue ball went in-off.`);
+    if(!ok){const t=escapeTarget(shotCam.aim);if(t!=null)lines.push("<b>Tip:</b> "+aimAdvice(shotCam.aim,t));}
     showResult(ok,ok?"Escaped":"Failed",lines,"Tap the table to go again. Try the same shot with left and right side to see the angle change.");
   }else{
     const potted=balls[1].in&&balls[1].pocket===pos.P, other=balls[1].in&&!potted;
@@ -400,6 +401,7 @@ function finish(){
       const od=unit(sub(pos.O,you.Cc)), toP=sub(pocketAim(pos.P),pos.O), miss=cross(od,toP);
       if(dot(od,toP)>0&&!potted)lines.push(`The object ball ran ${Math.abs(miss).toFixed(0)} mm ${miss>0?"left":"right"} of the pocket.`);
     }
+    if(!ok)lines.push("<b>Tip:</b> "+aimAdvice(shotCam.aim,neededAim().ang));
     if(inOff)lines.push(`The cue ball went in-off.`);
     if(other)lines.push(`It dropped in a different pocket, so it doesn't count.`);
     showResult(ok,ok?"Potted":"Missed",lines,"Red ghost: where your white hit. White ghost: where it needed to be. Tap the table to go again.");
@@ -525,21 +527,26 @@ function buildTable(){
 
   // cushions: rubber nose with angled jaws at each pocket
   const cushMat=new THREE.MeshStandardMaterial({color:0xffffff,map:clothTex(new THREE.Color(T.cloth).multiplyScalar(.92).getHex()),roughness:.9,envMapIntensity:.12});
-  const cc=T.cornerCap*MM*1.12, mc=T.midCap*MM*1.02;
+  const cc=T.cornerCap*MM*1.12, mc=T.midCap*MM*1.2;
   const H=pockets.map(pk=>({x:pk.hole.x*MM,y:pk.hole.y*MM,r:pk.hr*MM}));
   const edgeHit=(c,axis,val)=>{ // where a pocket drop crosses the line axis=val
     const d=axis==="y"?val-c.y:val-c.x, s=Math.sqrt(Math.max(0,c.r*c.r-d*d));
     return axis==="y"?[[c.x-s,val],[c.x+s,val]]:[[val,c.y-s],[val,c.y+s]];
   };
-  const cush=pts=>{const m=extrudeUp(shapeFromPts(pts),ch,cushMat,0.003);m.castShadow=m.receiveShadow=true;tableGroup.add(m);};
+  const cushMesh=sh=>{const m=extrudeUp(sh,ch,cushMat,0.003);m.castShadow=m.receiveShadow=true;tableGroup.add(m);};
+  // nA..nB is the nose on the playing edge, bA/bB the back ends at the pocket drops; the jaws curve round like real knuckles
+  const knuckle=(nose,back,long)=>long?[back[0],nose[1]]:[nose[0],back[1]];
+  const cushR=(nA,nB,bB,bA,long)=>{const sh=new THREE.Shape();sh.moveTo(bA[0],bA[1]);
+    let k=knuckle(nA,bA,long);sh.quadraticCurveTo(k[0],k[1],nA[0],nA[1]);sh.lineTo(nB[0],nB[1]);
+    k=knuckle(nB,bB,long);sh.quadraticCurveTo(k[0],k[1],bB[0],bB[1]);sh.closePath();cushMesh(sh);};
   const top=-cw, bot=w+cw, lft=-cw, rgt=l+cw;
   // long cushions, split by the middle pockets; nose on the playing edge, back ends where the drop starts
-  cush([[cc,0],[l/2-mc,0],edgeHit(H[4],"y",top)[0],edgeHit(H[0],"y",top)[1]]);
-  cush([[l/2+mc,0],[l-cc,0],edgeHit(H[1],"y",top)[0],edgeHit(H[4],"y",top)[1]]);
-  cush([[cc,w],edgeHit(H[2],"y",bot)[1],edgeHit(H[5],"y",bot)[0],[l/2-mc,w]]);
-  cush([[l/2+mc,w],edgeHit(H[5],"y",bot)[1],edgeHit(H[3],"y",bot)[0],[l-cc,w]]);
-  cush([[0,cc],edgeHit(H[0],"x",lft)[1],edgeHit(H[2],"x",lft)[0],[0,w-cc]]);
-  cush([[l,cc],[l,w-cc],edgeHit(H[3],"x",rgt)[0],edgeHit(H[1],"x",rgt)[1]]);
+  cushR([cc,0],[l/2-mc,0],edgeHit(H[4],"y",top)[0],edgeHit(H[0],"y",top)[1],true);
+  cushR([l/2+mc,0],[l-cc,0],edgeHit(H[1],"y",top)[0],edgeHit(H[4],"y",top)[1],true);
+  cushR([cc,w],[l/2-mc,w],edgeHit(H[5],"y",bot)[0],edgeHit(H[2],"y",bot)[1],true);
+  cushR([l/2+mc,w],[l-cc,w],edgeHit(H[3],"y",bot)[0],edgeHit(H[5],"y",bot)[1],true);
+  cushR([0,cc],[0,w-cc],edgeHit(H[2],"x",lft)[0],edgeHit(H[0],"x",lft)[1],false);
+  cushR([l,cc],[l,w-cc],edgeHit(H[3],"x",rgt)[0],edgeHit(H[1],"x",rgt)[1],false);
 
   // wooden rail with pocket cut-outs
   const woodMat=new THREE.MeshStandardMaterial({color:0xffffff,map:woodTex(T.wood),roughness:.38,metalness:.05,envMapIntensity:.5});
@@ -585,13 +592,15 @@ function buildTable(){
     for(let i=1;i<4;i++){put(-cw-rw*0.55,w*i/4);put(l+cw+rw*0.55,w*i/4);}
   }
   // pocket drops: dark liner tube, net bottom, rim
-  const linerMat=new THREE.MeshStandardMaterial({color:T.liner,roughness:.85,side:THREE.DoubleSide});
+  const linerMat=new THREE.MeshStandardMaterial({color:0x0b0806,roughness:1,envMapIntensity:0,side:THREE.DoubleSide});
+  const lipMat=new THREE.MeshStandardMaterial({color:T.liner,roughness:.7,envMapIntensity:.2,side:THREE.DoubleSide});
   const rimMat=new THREE.MeshStandardMaterial({color:state.table==="snooker"?0x3a2416:0x222222,roughness:.5,metalness:state.table==="snooker"?.1:.4});
   pockets.forEach(pk=>{
     const c=to3(pk.hole,0), hr=pk.hr*MM;
     const tube=new THREE.Mesh(new THREE.CylinderGeometry(hr,hr*0.92,0.16,32,1,true),linerMat);tube.position.set(c.x,-0.08+0.002,c.z);tableGroup.add(tube);
     const bottom=new THREE.Mesh(new THREE.CircleGeometry(hr*0.92,32),new THREE.MeshBasicMaterial({color:0x050505}));bottom.rotation.x=-Math.PI/2;bottom.position.set(c.x,-0.158,c.z);tableGroup.add(bottom);
-    const wall=new THREE.Mesh(new THREE.CylinderGeometry(hr,hr,rh,32,1,true,0,Math.PI*2),linerMat);wall.position.set(c.x,rh/2,c.z);tableGroup.add(wall);
+    const wall=new THREE.Mesh(new THREE.CylinderGeometry(hr,hr,rh,32,1,true),linerMat);wall.position.set(c.x,rh/2,c.z);tableGroup.add(wall);
+    const lip=new THREE.Mesh(new THREE.CylinderGeometry(hr+0.001,hr+0.001,0.012,32,1,true),lipMat);lip.position.set(c.x,rh-0.006,c.z);tableGroup.add(lip);
     const rim=new THREE.Mesh(new THREE.TorusGeometry(hr+0.002,0.004,8,40),rimMat);rim.rotation.x=Math.PI/2;rim.position.set(c.x,rh+0.002,c.z);tableGroup.add(rim);
   });
 
@@ -705,7 +714,7 @@ function placeCamera(){
   if(!pos||!w||!h)return;
   meshes.canopy.forEach(m=>m.visible=state.cam==="behind");
   if(state.cam==="behind"){
-    camera.fov=44;
+    camera.fov=host.clientWidth<host.clientHeight?40:44;
     const u=dirOf(phase==="aim"?aim:(shotCam?shotCam.aim:aim)), C=pos.C;
     camTo(to3(sub(C,mul(u,T.R*13)),T.R*5.2*MM),to3(add(C,mul(u,1100)),0),new THREE.Vector3(0,1,0));
     camera.setViewOffset(w,h,0,Math.round(h*0.2),w,h);
@@ -722,8 +731,9 @@ let lastW=0;
 function resize(){
   if(!renderer)return;
   const w=host.clientWidth; if(!w||w===lastW)return; lastW=w;
-  const vh=Math.max(window.innerHeight,(window.screen&&window.screen.height)||0)*0.85;
-  const h=Math.round(Math.min(w<600?w*1.05:w*0.6,vh*0.7));
+  const touch=window.matchMedia("(pointer:coarse)").matches, vh=window.innerHeight||800;
+  // phones: tall view that fills most of the screen; desktops: wide view
+  const h=Math.round(touch||w<600?Math.min(w*1.35,vh*0.66):Math.min(w*0.6,vh*0.72));
   host.style.height=h+"px";renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix();
 }
 
@@ -752,10 +762,10 @@ function updateReadout(){
   if(!pos)return;
   const show=state.mode==="practice"||revealed;
   const drill=(DRILLS.find(d=>d.id===state.drill)||DRILLS[0]).name;
-  $("tag").textContent=`${T.name} · ${drill}`;
+  $("tag").textContent=`${T.name} · ${drill}${state.mode==="test"?" · guides off":""}`;
   $("rSpin").textContent=spinName().toLowerCase();
   if(pos.esc){
-    const rc=pred&&pred.rec;let t="hidden";
+    const rc=pred&&pred.rec;let t="guides off";
     if(show&&rc)t=rc.first==="block"?"hits blue first":!rc.first?"misses":rc.cushBefore<1?"direct, no cushion":`${rc.cushBefore} cush, ${fracShort(fracOf(rc.firstB))}`;
     $("rYou").textContent=t;$("rNeed").textContent=`cushion, then ${T.objName}`;$("rCut").textContent="–";return;
   }
@@ -763,9 +773,9 @@ function updateReadout(){
   $("rYou").textContent=hit?fracName(fracOf(b)):"missing";
   const nu=dirOf(neededAim().ang), nb=cross(nu,sub(pos.O,pos.C));
   const cut=deg(Math.acos(Math.max(-1,Math.min(1,dot(nu,unit(sub(pocketAim(pos.P),pos.O)))))));
-  $("rNeed").textContent=show?fracName(fracOf(nb)):"hidden";
-  $("rCut").textContent=show?cut.toFixed(1)+"°":"hidden";
-  $("insetNeed").textContent=show?"Need: "+fracShort(fracOf(nb)):"Need: hidden in test";
+  $("rNeed").textContent=show?fracName(fracOf(nb)):"guides off";
+  $("rCut").textContent=show?cut.toFixed(1)+"°":"guides off";
+  $("insetNeed").textContent=show?"Need: "+fracShort(fracOf(nb)):"Need: guides off";
 }
 function renderStats(){
   $("sPot").textContent=stats.pot;$("sAtt").textContent=stats.att;$("sStreak").textContent=stats.streak;$("sBest").textContent=stats.best;
@@ -778,7 +788,7 @@ function group(id,items,key,onSel,cls){
 }
 const msg=t=>ui.result.innerHTML=`<p>${t}</p>`;
 group("drillChips",DRILLS,"drill",()=>{newPosition();msg(pos.esc?`The blue blocks your line. Find a way off a cushion onto the ${T.objName}.`:"New drill. Get down on the shot and find the contact.");},"chip");
-group("modeSeg",[{id:"practice",name:"On"},{id:"test",name:"Test"}],"mode",()=>{predKey="";updateReadout();sceneRefresh();});
+group("modeSeg",[{id:"practice",name:"Guides on"},{id:"test",name:"Guides off"}],"mode",()=>{predKey="";updateReadout();sceneRefresh();$("reveal").textContent=state.mode==="test"?"Hint":"Show aim";});
 group("camSeg",[{id:"behind",name:"Behind ball"},{id:"over",name:"Overhead"}],"cam",()=>{});
 group("tableSeg",Object.entries(TABLES).map(([id,t])=>({id,name:t.name})),"table",()=>{T=TABLES[state.table];buildPockets();buildTable();newPosition();buildRef();});
 function setCam(c){state.cam=c;document.querySelectorAll("#camSeg button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.id===c));}
@@ -793,6 +803,19 @@ ui.pw.oninput=()=>ui.pwOut.textContent=ui.pw.value+"%";
 ui.shoot.onclick=shoot;
 $("retry").onclick=()=>{resetShot();msg("Same position. Try again.");};
 $("next").onclick=()=>{newPosition();msg(pos.esc?`New escape. Find a way off a cushion onto the ${T.objName}.`:"New position. Find the contact.");};
+function wrapDeg(d){while(d>180)d-=360;while(d<-180)d+=360;return d;}
+function aimAdvice(from,to){ // which way to move the cue, as seen from behind the ball
+  const d=wrapDeg(deg(to-from)), a=Math.abs(d);
+  if(a<0.06)return "Your line was spot on.";
+  const word=a<0.3?"a fraction":a<1?"slightly":a<3?"a little":"well";
+  return `Aim ${word} to the ${d>0?"right":"left"} (about ${a<0.1?a.toFixed(2):a.toFixed(1)}°).`;
+}
+function escapeTarget(a0){ // nearest aim to a0 that escapes off a cushion and catches the ball full
+  let best=null;
+  for(let d=-10;d<=10;d+=0.05){const a=a0+rad(d),{rec}=simulate(a,{max:5,dt:1/120,stopAtContact:true});
+    if(rec.first==="obj"&&rec.cushBefore>=1){const sc=Math.abs(rec.firstB)+Math.abs(d)*4;if(!best||sc<best.s)best={a,s:sc};}}
+  return best&&best.a;
+}
 function solveEscape(){
   let best=null;
   const score=a=>{const {rec}=simulate(a,{max:5,dt:1/120,stopAtContact:true});
@@ -804,6 +827,9 @@ function solveEscape(){
 }
 $("reveal").onclick=()=>{
   if(phase!=="aim")resetShot();
+  if(state.mode==="test"){ // hint only: say which way to move, without showing the line
+    const target=pos.esc?escapeTarget(aim):neededAim().ang;
+    msg(target==null?"No cushion escape near this line. Try a different cushion.":"Hint: "+aimAdvice(aim,target).replace("Your line was spot on.","You're on it. Shoot!"));return;}
   if(pos.esc){const a=solveEscape();if(a==null){msg("Couldn't find a one-cushion escape at this power. Add more power and try again.");return;}
     aim=a;revealed=true;predKey="";updateReadout();sceneRefresh();msg(`Cue set on an escape that catches the ${T.objName} full, allowing for your spin and power.`);return;}
   aim=neededAim().ang;revealed=true;updateReadout();sceneRefresh();msg("Cue set on the correct contact. Look at how much of the object ball the white covers from down here.");
