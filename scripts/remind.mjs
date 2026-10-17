@@ -22,10 +22,18 @@ const SITE = 'https://delooze29-stack.github.io/scoreker/';
 const H = 3600000;
 
 const USER = process.env.GMAIL_USER || PLAYERS[0].email;
-const PASS = (process.env.GMAIL_APP_PASSWORD || '').replace(/\s+/g, '');
-const VAPID_PRIVATE = (process.env.VAPID_PRIVATE_KEY || '').trim();
+const PASS = (process.env.GMAIL_APP_PASSWORD || '').replace(/[\s'"]+/g, '');
+const VAPID_PRIVATE = (process.env.VAPID_PRIVATE_KEY || '').replace(/[\s'"]+/g, '');
 const TEST = process.env.TEST === '1' || process.env.TEST === 'true';
 const FS_BASE = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents`;
+
+// Problems show up as red notes on the GitHub run page, without failing every hourly run
+const problems = [];
+function problem(title, e) {
+  const msg = String((e && e.message) || e).replace(/\r?\n/g, ' ').slice(0, 400);
+  problems.push(`${title}: ${msg}`);
+  console.log(`::error title=${title}::${msg}`);
+}
 
 const fmt = (iso) => new Date(iso).toLocaleString('en-GB', { timeZone: 'Europe/London', weekday: 'short', hour: '2-digit', minute: '2-digit' });
 
@@ -70,13 +78,19 @@ async function pushTo(devices, email, payload) {
   const subs = devices[email.toLowerCase()] || [];
   if (!VAPID_PRIVATE || !subs.length) return 0;
   if (!webpush) {
-    webpush = (await import('web-push')).default;
-    webpush.setVapidDetails(`mailto:${USER}`, VAPID_PUBLIC_KEY, VAPID_PRIVATE);
+    try {
+      const wp = (await import('web-push')).default;
+      wp.setVapidDetails(`mailto:${USER}`, VAPID_PUBLIC_KEY, VAPID_PRIVATE);
+      webpush = wp;
+    } catch (e) { problem('Notification key (VAPID_PRIVATE_KEY) looks wrong', e); return 0; }
   }
   let ok = 0;
   for (const sub of subs) {
     try { await webpush.sendNotification(sub, JSON.stringify({ url: SITE, ...payload }), { TTL: 4 * 3600 }); ok++; }
-    catch (e) { console.warn(`  push failed (${e.statusCode || e.message})${[404, 410].includes(e.statusCode) ? ' — that phone has switched notifications off' : ''}`); }
+    catch (e) {
+      if ([404, 410].includes(e.statusCode)) console.log('  a phone has switched notifications off — skipped');
+      else problem('Phone notification failed', `${e.statusCode || ''} ${e.body || e.message}`);
+    }
   }
   return ok;
 }
@@ -88,8 +102,13 @@ async function emailTo(to, m) {
     const nodemailer = (await import('nodemailer')).default;
     transport = nodemailer.createTransport({ service: 'gmail', auth: { user: USER, pass: PASS } });
   }
-  await transport.sendMail({ from: `ScoreKer <${USER}>`, to, subject: m.subject, text: m.text, html: m.html });
-  return true;
+  try {
+    await transport.sendMail({ from: `ScoreKer <${USER}>`, to, subject: m.subject, text: m.text, html: m.html });
+    return true;
+  } catch (e) {
+    problem(/Invalid login|535|BadCredentials/i.test(e.message) ? 'Gmail refused the app password (GMAIL_APP_PASSWORD)' : 'Email failed', e);
+    return false;
+  }
 }
 
 // ---------- wording ----------
@@ -159,7 +178,9 @@ async function main() {
   if (now < lock) {
     for (const p of PLAYERS) {
       const email = p.email.toLowerCase();
-      const st = await readStatus(week.weekId, email);
+      let st;
+      try { st = await readStatus(week.weekId, email); }
+      catch (e) { problem(`Couldn't check ${p.name}'s predictions`, e); continue; }
       const done = sent[email] || [];
       let kind = null;
       if (now >= red - 22 * H && now < red - 12 * H && !(st && st.main)) kind = 'eve';
@@ -171,8 +192,8 @@ async function main() {
       const n = await pushTo(devices, email, m.push);
       const e = await emailTo(p.email, m);
       console.log(`  sent: ${n} notification(s)${e ? ' + email' : ''} — ${m.subject}`);
-      sent[email] = [...done, kind];
-      changed = true;
+      if (n || e) { sent[email] = [...done, kind]; changed = true; }
+      else console.log(`  nothing got through to ${p.name} — will try again next hour`);
     }
   } else {
     // Full time: every game in the frame has finished
@@ -195,4 +216,8 @@ async function main() {
   }
 }
 
-await main();
+try { await main(); } catch (e) { problem('Reminder job crashed', e); }
+if (problems.length) {
+  console.log(`\n${problems.length} problem(s):\n- ${problems.join('\n- ')}`);
+  if (TEST) process.exit(1); // a test run goes red so you can see what's wrong
+}
