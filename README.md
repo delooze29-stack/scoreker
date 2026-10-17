@@ -36,7 +36,7 @@ Roughly 10–40 API credits a week, well under the free 500 a month. You can als
 
 ## Practice table
 
-`practice/` is a standalone 3D snooker and pool practice table, linked from the **Practice** tab in the bottom menu. It teaches cue ball contact (ghost ball, view down the cue, overlap check), spin and cushion escapes. It runs entirely in the browser: no login, no Firebase, nothing saved.
+`practice/` is a standalone 3D snooker and pool practice table, linked from the **Practice** tab in the bottom menu. It teaches cue ball contact (ghost ball, view down the cue, overlap check), spin and cushion escapes on snooker, US pool (8ft) and UK 8-ball (7ft) tables. It runs entirely in the browser: no login, no Firebase, nothing saved.
 
 ## Doughty's Links (golf game) leaderboard
 

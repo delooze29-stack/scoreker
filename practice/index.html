@@ -201,8 +201,10 @@ button,input{font:inherit}
 const TABLES={
   snooker:{name:"Snooker",L:3569,W:1778,R:26.25,cornerCap:54,midCap:46,midOff:0.6,
     obj:0xc0151b,blk:0x1c49b3,objName:"red",objCss:"#c8231f",objHi:"#ff6a5a",cloth:0x1c6a35,wood:0x4a2a17,liner:0x2b1a10,numbers:false,diamonds:false},
-  pool:{name:"Pool 9ft",L:2540,W:1270,R:28.575,cornerCap:70,midCap:60,midOff:0.7,
-    obj:0xe8b10f,blk:0x1f3fa3,objName:"1-ball",objCss:"#e8b81c",objHi:"#ffe27a",cloth:0x1a5b8c,wood:0x3a2618,liner:0x161616,numbers:true,diamonds:true}
+  pool:{name:"US Pool",L:2235,W:1118,R:28.575,cornerCap:80,midCap:68,midOff:0.7,
+    obj:0xe8b10f,blk:0x1f3fa3,objName:"1-ball",objCss:"#e8b81c",objHi:"#ffe27a",cloth:0x1a5b8c,wood:0x3a2618,liner:0x161616,numbers:true,diamonds:true,rail:0.12},
+  uk:{name:"UK 8-ball",L:1829,W:914,R:25.4,cornerCap:46,midCap:42,midOff:0.6,
+    obj:0xc8141c,blk:0xf2c200,objName:"red",objCss:"#d0202a",objHi:"#ff7a6a",cloth:0x1b6b3c,wood:0x3b2416,liner:0x161616,numbers:false,diamonds:false,rail:0.10}
 };
 const DRILLS=[
   {id:"mix",name:"Mixed",min:0,max:68},
@@ -366,7 +368,7 @@ function shoot(){
 function strike(){
   follow={dir:shotInfo.u};
   balls[0].v=mul(shotInfo.u,speedOf(+ui.pw.value/100));balls[0].side=spin.x;balls[0].follow=spin.y;liveRec=newRec();
-  phase="run";revealed=true;updateReadout();sceneRefresh();
+  phase="run";updateReadout();sceneRefresh();
 }
 function tally(ok,fN){
   stats.att++; if(ok){stats.pot++;stats.streak++;stats.best=Math.max(stats.best,stats.streak);}else stats.streak=0;
@@ -489,7 +491,7 @@ function buildTable(){
   if(tableGroup){scene.remove(tableGroup);tableGroup.traverse(o=>{if(o.geometry)o.geometry.dispose();});}
   tableGroup=new THREE.Group();scene.add(tableGroup);
   const {L,W,R}=T, l=L*MM, w=W*MM, r=R*MM;
-  const cw=0.048, ch=r*1.32, rw=state.table==="snooker"?0.13:0.12, rh=ch+0.006, ox=cw+rw;
+  const cw=state.table==="uk"?0.042:0.048, ch=r*1.32, rw=T.rail||0.13, rh=ch+0.006, ox=cw+rw;
 
   // lights: canopy over the bed, one shadow caster, soft fill
   tableGroup.add(new THREE.HemisphereLight(0xfff3dd,0x0a0d0b,0.25));
@@ -524,6 +526,7 @@ function buildTable(){
   }else{
     const s=new THREE.Mesh(new THREE.CircleGeometry(0.008,16),mark);s.rotation.x=-Math.PI/2;s.position.set(l*0.75,y0,w/2);tableGroup.add(s);
     const s2=s.clone();s2.position.set(l*0.25,y0,w/2);tableGroup.add(s2);
+    if(state.table==="uk"){const bl=new THREE.Mesh(new THREE.PlaneGeometry(0.003,w),mark);bl.rotation.x=-Math.PI/2;bl.position.set(l*0.2,y0,w/2);tableGroup.add(bl);}
   }
 
   // cushions: rubber nose with angled jaws at each pocket
@@ -612,9 +615,15 @@ function buildTable(){
     const tube=new THREE.Mesh(new THREE.CylinderGeometry(hr*0.74,hr*0.7,0.18,32,1,true),linerMat);tube.position.set(c.x,-0.13,c.z);tableGroup.add(tube);
     const bottom=new THREE.Mesh(new THREE.CircleGeometry(hr*0.7,32),new THREE.MeshBasicMaterial({color:0x030303}));bottom.rotation.x=-Math.PI/2;bottom.position.set(c.x,-0.218,c.z);tableGroup.add(bottom);
     const ao=new THREE.Mesh(new THREE.PlaneGeometry((hr+0.04)*2,(hr+0.04)*2),aoMat);ao.rotation.x=-Math.PI/2;ao.position.set(c.x,0.0016,c.z);ao.renderOrder=1;tableGroup.add(ao);
-    const wall=new THREE.Mesh(new THREE.CylinderGeometry(hr,hr,rh,32,1,true),linerMat);wall.position.set(c.x,rh/2,c.z);tableGroup.add(wall);
-    const lip=new THREE.Mesh(new THREE.CylinderGeometry(hr+0.001,hr+0.001,0.012,32,1,true),lipMat);lip.position.set(c.x,rh-0.006,c.z);tableGroup.add(lip);
-    const plate=new THREE.Mesh(new THREE.TorusGeometry(hr+0.007,0.0095,12,48),rimMat);plate.rotation.x=Math.PI/2;plate.scale.z=0.42;plate.position.set(c.x,rh+0.0015,c.z);plate.castShadow=true;tableGroup.add(plate);
+    // the part of the drop's edge that runs through the wooden rail (outside the cushion line)
+    const N=360, out=[];
+    for(let i=0;i<N;i++){const a=i/N*Math.PI*2, x=c.x+Math.cos(a)*(hr+0.004), z=c.z+Math.sin(a)*(hr+0.004);out.push(x<-cw||x>l+cw||z<-cw||z>w+cw);}
+    let st=out.findIndex((o,i)=>o&&!out[(i+N-1)%N]); if(st<0)st=0;
+    let n=0; while(n<N&&out[(st+n)%N])n++;
+    const a0=st/N*Math.PI*2, L=n/N*Math.PI*2, th0=Math.PI/2-a0-L;
+    const wall=new THREE.Mesh(new THREE.CylinderGeometry(hr,hr,rh,48,1,true,th0,L),linerMat);wall.position.set(c.x,rh/2,c.z);tableGroup.add(wall);
+    const lip=new THREE.Mesh(new THREE.CylinderGeometry(hr+0.001,hr+0.001,0.012,48,1,true,th0,L),lipMat);lip.position.set(c.x,rh-0.006,c.z);tableGroup.add(lip);
+    const plate=new THREE.Mesh(new THREE.TorusGeometry(hr+0.007,0.0095,12,48,L),rimMat);plate.rotation.set(Math.PI/2,0,a0);plate.scale.z=0.42;plate.position.set(c.x,rh+0.0015,c.z);plate.castShadow=true;tableGroup.add(plate);
   });
 
   // room
@@ -671,7 +680,7 @@ function sceneRefresh(){
   meshes.ghost.position.copy(to3(need.G,r));meshes.ghostEdge.position.copy(meshes.ghost.position);
   meshes.potLine.visible=guides&&phase!=="run";
   meshes.potLine.geometry.setFromPoints([to3(pos.O,0.004),to3(pocketAim(pos.P),0.004)]);meshes.potLine.computeLineDistances();
-  meshes.yours.visible=!!(phase==="done"&&shotInfo&&shotInfo.you&&shotInfo.you.hit);
+  meshes.yours.visible=!!(guides&&phase==="done"&&shotInfo&&shotInfo.you&&shotInfo.you.hit);
   if(meshes.yours.visible)meshes.yours.position.copy(to3(shotInfo.you.Cc,r));
 }
 
