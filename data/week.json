@@ -1,7 +1,7 @@
 {
   "weekId": "2026-10-17",
   "createdAt": "2026-10-13T08:30:07.536Z",
-  "updatedAt": "2026-10-17T19:42:48.641Z",
+  "updatedAt": "2026-10-18T16:44:12.484Z",
   "red": {
     "id": "764e6513cb3f348881503df70ccb90e0",
     "sport": "soccer_epl",
@@ -169,8 +169,11 @@
         "draw": 4.33,
         "away": 5.31
       },
-      "status": "NS",
-      "result": null,
+      "status": "FT",
+      "result": [
+        5,
+        0
+      ],
       "colour": "green"
     },
     {
@@ -242,8 +245,11 @@
         "draw": 3.56,
         "away": 2.68
       },
-      "status": "NS",
-      "result": null,
+      "status": "FT",
+      "result": [
+        1,
+        1
+      ],
       "colour": "black"
     }
   ],
@@ -259,8 +265,11 @@
       "draw": 3.95,
       "away": 1.57
     },
-    "status": "NS",
-    "result": null
+    "status": "LIVE",
+    "result": [
+      0,
+      0
+    ]
   },
   "redKickoff": "2026-10-17T11:30:00Z",
   "freeLock": "2026-10-17T14:00:00.000Z",
