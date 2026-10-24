@@ -193,7 +193,7 @@ export class View {
 
     // cushions, built from the same outline the physics uses
     const cushMat = new THREE.MeshStandardMaterial({ color: 0xffffff, map: clothTex(new THREE.Color(st.cloth).multiplyScalar(.9).getHex(), [6, 6]), roughness: .9, envMapIntensity: .1 });
-    table.cushions.forEach(pts => {
+    (table.cushionShapes || table.cushions).forEach(pts => {
       const sh = new THREE.Shape(); pts.forEach((p, i) => i ? sh.lineTo(p.x, p.y) : sh.moveTo(p.x, p.y)); sh.closePath();
       const bev = 0.006;
       const g = new THREE.ExtrudeGeometry(sh, { depth: ch - bev * 2, bevelEnabled: true, bevelThickness: bev, bevelSize: bev, bevelOffset: -bev, bevelSegments: 4, curveSegments: 24 });
@@ -252,7 +252,7 @@ export class View {
   }
 
   innerOutline(table) {
-    const { L, W, cw } = table, H = table.pockets.map(p => ({ x: p.drop.x, y: p.drop.y, r: p.drop.r + 0.004 }));
+    const { L, W, cw } = table, H = table.pockets.map(p => ({ x: p.drop.x, y: p.drop.y, r: p.drop.r }));
     const cx = L / 2, cy = W / 2, path = new THREE.Path();
     const hit = (c, axis, val) => { const d = axis === "y" ? val - c.y : val - c.x, s = Math.sqrt(Math.max(0, c.r * c.r - d * d)); return axis === "y" ? [[c.x - s, val], [c.x + s, val]] : [[val, c.y - s], [val, c.y + s]]; };
     const around = (c, from, to) => {

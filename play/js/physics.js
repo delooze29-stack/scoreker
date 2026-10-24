@@ -11,21 +11,21 @@ export const SPECS = {
   snooker: {
     name: "Snooker", L: 3.569, W: 1.778, R: 0.02625, cw: 0.05,
     corner: { mouth: 0.088, taper: 0.10, fall: 0.62, knuckle: 0.012, dropR: 0.050 },
-    middle: { mouth: 0.100, spread: 0.30, fall: 0.30, knuckle: 0.016, dropR: 0.054 },
+    middle: { mouth: 0.100, spread: 0.14, fall: 0.30, knuckle: 0.016, dropR: 0.054 },
     mu: { slide: 0.2, roll: 0.016, spin: 16, ball: 0.05, cushion: 0.18 },
     e: { ball: 0.94, cushion: 0.72 }, vmax: 7.0,
   },
   uk: {
     name: "UK 8-ball", L: 1.83, W: 0.915, R: 0.0254, cw: 0.042,
     corner: { mouth: 0.092, taper: 0.08, fall: 0.55, knuckle: 0.012, dropR: 0.050 },
-    middle: { mouth: 0.098, spread: 0.28, fall: 0.30, knuckle: 0.014, dropR: 0.052 },
+    middle: { mouth: 0.098, spread: 0.14, fall: 0.30, knuckle: 0.014, dropR: 0.052 },
     mu: { slide: 0.2, roll: 0.02, spin: 16, ball: 0.05, cushion: 0.18 },
     e: { ball: 0.94, cushion: 0.76 }, vmax: 8.5,
   },
   us: {
     name: "US 8-ball", L: 2.24, W: 1.12, R: 0.028575, cw: 0.05,
     corner: { mouth: 0.118, taper: 0.12, fall: 0.45, knuckle: 0.008, dropR: 0.062 },
-    middle: { mouth: 0.132, spread: 0.26, fall: 0.30, knuckle: 0.010, dropR: 0.066 },
+    middle: { mouth: 0.132, spread: 0.15, fall: 0.30, knuckle: 0.010, dropR: 0.066 },
     mu: { slide: 0.2, roll: 0.018, spin: 16, ball: 0.05, cushion: 0.18 },
     e: { ball: 0.95, cushion: 0.78 }, vmax: 10.0,
   },
@@ -92,13 +92,26 @@ export function buildTable(gameId) {
   // Middle pockets sit on the long rails (y=0 and y=W); corners join a long and a short rail.
   pockets.forEach((p, i) => {
     p.id = i;
-    // The hole: a circle whose front edge is where the ball drops and which passes through the back
-    // ends of both cushion jaws, so the pocket reads as a round opening with no flat shelf around it.
-    const ends = [p.endEntry, p.endExit].map(e => ({ depth: (e.x - p.M.x) * p.o.x + (e.y - p.M.y) * p.o.y, side: Math.abs((e.x - p.M.x) * p.o.y - (e.y - p.M.y) * p.o.x) }));
-    const dEnd = (ends[0].depth + ends[1].depth) / 2, hg = (ends[0].side + ends[1].side) / 2, f = p.fall;
-    let dc = (f * f - dEnd * dEnd - hg * hg) / (2 * (f - dEnd)), rr = dc - f;
-    if (!(rr > 0) || rr > p.mouth * 0.85) { rr = Math.min(p.mouth * 0.85, Math.max(p.dropR * 0.8, hg + 0.004)); dc = f + rr; }
-    p.drop = { x: p.M.x + p.o.x * dc, y: p.M.y + p.o.y * dc, r: rr + 0.0015 };
+    // The hole: a circle whose front edge is where the ball drops and which crosses both jaws about
+    // two ball-radii further in. The cushions and the rail are cut along this circle, like a real pocket.
+    const along = q => (q.x - p.M.x) * p.o.x + (q.y - p.M.y) * p.o.y, side = q => Math.abs((q.x - p.M.x) * p.o.y - (q.y - p.M.y) * p.o.x);
+    const tD = p.fall + 1.9 * R;
+    const onJaw = (nose, dir) => { const k = (tD - along(nose)) / (dir.x * p.o.x + dir.y * p.o.y); return { x: nose.x + dir.x * k, y: nose.y + dir.y * k }; };
+    p.cutEntry = onJaw(p.noseEntry, p.jawEntry); p.cutExit = onJaw(p.noseExit, p.jawExit);
+    const hg = (side(p.cutEntry) + side(p.cutExit)) / 2, dd = tD - p.fall;
+    let rr = (hg * hg + dd * dd) / (2 * dd); const dc = p.fall + rr;
+    const cx = p.M.x + p.o.x * dc, cy = p.M.y + p.o.y * dc;
+    // the hole must reach the back of the cushions on both sides, or there'd be a sliver of rail inside it
+    const backs = p.kind === "corner" ? [[Math.abs(cx - (p.M.x < L / 2 ? -cw : L + cw))], [Math.abs(cy - (p.M.y < W / 2 ? -cw : W + cw))]] : [[Math.abs(cy - (p.M.y < W / 2 ? -cw : W + cw))]];
+    rr = Math.max(rr, ...backs.map(b => b[0] + 0.005));
+    p.drop = { x: cx, y: cy, r: rr };
+    // and cut each jaw exactly where it meets the hole
+    const hitCircle = (nose, dir) => {
+      const fx = nose.x - cx, fy = nose.y - cy, b = fx * dir.x + fy * dir.y, c = fx * fx + fy * fy - rr * rr, disc = b * b - c;
+      const k = disc > 0 ? -b - Math.sqrt(disc) : (tD - along(nose)) / (dir.x * p.o.x + dir.y * p.o.y);
+      return { x: nose.x + dir.x * k, y: nose.y + dir.y * k };
+    };
+    p.cutEntry = hitCircle(p.noseEntry, p.jawEntry); p.cutExit = hitCircle(p.noseExit, p.jawExit);
     // where to aim the object ball: just inside the mouth
     p.aim = { x: p.M.x + p.o.x * p.fall * 0.3, y: p.M.y + p.o.y * p.fall * 0.3 };
   });
@@ -114,6 +127,30 @@ export function buildTable(gameId) {
     pts.push(raw[3]);
     cushions.push(pts);
   }
+  // Closed outlines of the cushions for drawing (physics still uses the polylines above).
+  const backLine = [["y", -cw], ["y", -cw], ["x", L + cw], ["y", W + cw], ["y", W + cw], ["x", -cw]];
+  const meet = (c, [ax, v]) => { // where the hole circle crosses a back line
+    const d = ax === "y" ? v - c.y : v - c.x, q = c.r * c.r - d * d; if (q <= 0) return [];
+    const s = Math.sqrt(q); return ax === "y" ? [{ x: c.x - s, y: v }, { x: c.x + s, y: v }] : [{ x: v, y: c.y - s }, { x: v, y: c.y + s }];
+  };
+  const arc = (c, P, Q) => { // the shorter way round the circle from P to Q
+    const a = Math.atan2(P.y - c.y, P.x - c.x); let b = Math.atan2(Q.y - c.y, Q.x - c.x) - a;
+    while (b > Math.PI) b -= 2 * Math.PI; while (b < -Math.PI) b += 2 * Math.PI;
+    const out = [], n = Math.max(2, Math.ceil(Math.abs(b) / 0.12));
+    for (let i = 1; i < n; i++) { const t = a + b * i / n; out.push({ x: c.x + Math.cos(t) * c.r, y: c.y + Math.sin(t) * c.r }); }
+    return out;
+  };
+  const cushionShapes = [];
+  for (let i = 0; i < 6; i++) {
+    const a = pockets[i], b = pockets[(i + 1) % 6], line = backLine[i];
+    const near = (pts, J) => pts.sort((m, n) => Math.hypot(m.x - J.x, m.y - J.y) - Math.hypot(n.x - J.x, n.y - J.y))[0];
+    const Ka = near(meet(a.drop, line), a.cutExit) || a.endExit, Kb = near(meet(b.drop, line), b.cutEntry) || b.endEntry;
+    const pts = [Ka, ...arc(a.drop, Ka, a.cutExit), a.cutExit];
+    pts.push(...fillet(a.cutExit, a.noseExit, b.noseEntry, a.knuckle, 6));
+    pts.push(...fillet(a.noseExit, b.noseEntry, b.cutEntry, b.knuckle, 6));
+    pts.push(b.cutEntry, ...arc(b.drop, b.cutEntry, Kb), Kb);
+    cushionShapes.push(pts);
+  }
   const segs = [];
   const addSeg = (p, q) => { const dx = q.x - p.x, dy = q.y - p.y, l2 = dx * dx + dy * dy; if (l2 > 1e-12) segs.push({ ax: p.x, ay: p.y, dx, dy, l2 }); };
   cushions.forEach(pts => { for (let i = 0; i < pts.length - 1; i++) addSeg(pts[i], pts[i + 1]); });
@@ -124,7 +161,7 @@ export function buildTable(gameId) {
     const tX = { x: p.endExit.x + p.jawExit.x * ext, y: p.endExit.y + p.jawExit.y * ext };
     addSeg(p.endEntry, tE); addSeg(p.endExit, tX); addSeg(tE, tX);
   });
-  return { id: gameId, spec: S, L, W, R, cw, pockets, cushions, segs };
+  return { id: gameId, spec: S, L, W, R, cw, pockets, cushions, cushionShapes, segs };
 }
 
 // ---------------------------------------------------------------- simulation
