@@ -82,6 +82,9 @@ function score(table, s, res, me, lv) {
   let sc = 0;
   if (s.game === "snooker") {
     sc += ((s2.scores[me] - s.scores[me]) - (s2.scores[opp] - s.scores[opp])) * 14;
+  } else if (s.game === "nine") {
+    const left = st => st.balls.filter(b => b.on && b.id).length;
+    sc += (left(s) - left(s2)) * 25;
   } else {
     const mineLeft = st => { const g = st.groups[me]; return g ? st.balls.filter(b => b.on && b.id && Rules.def(st.game, b.id).kind === g).length : 7; };
     sc += (mineLeft(s) - mineLeft(s2)) * 30;

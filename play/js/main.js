@@ -10,34 +10,70 @@ const D2R = Math.PI / 180;
 const STYLES = {
   snooker: { env: "studio", crowd: false, cloth: 0x119a25, wood: 0x6a3416, railWidth: 0.12, railRough: .32, plate: 0x2a170c, plateRough: .5, plateMetal: .05, diamonds: false },
   uk:      { env: "pub", crowd: false, cloth: 0x1d6e3c, wood: 0x3a2213, railWidth: 0.09, railRough: .42, plate: 0x0d0d0d, plateRough: .35, plateMetal: .15, diamonds: false },
+  nine:    { env: "arena", crowd: true, cloth: 0x1673b8, wood: 0x0b0a09, railWidth: 0.11, railRough: .3, plate: 0x0b0b0b, plateRough: .4, plateMetal: .1, diamonds: true },
   us:      { env: "arena", crowd: true, cloth: 0x1673b8, wood: 0x0b0a09, railWidth: 0.11, railRough: .3, plate: 0x0b0b0b, plateRough: .4, plateMetal: .1, diamonds: true },
 };
 const GAMES = [
   { id: "snooker", name: "Snooker", note: "12ft table, 15 reds", cloth: "#27a83a", wood: "#6a3416", balls: ["#b3121c", "#b3121c", "#f08cb4", "#111"] },
   { id: "uk", name: "UK 8-ball", note: "7ft pub table, reds & yellows", cloth: "#1d6e3c", wood: "#2c1a10", balls: ["#c8141c", "#f2c200", "#111", "#c8141c"] },
   { id: "us", name: "US 8-ball", note: "8ft table, spots & stripes", cloth: "#1673b8", wood: "#161412", balls: ["#f2b705", "#1d3fae", "#d0261d", "#111"] },
+  { id: "nine", name: "9-ball", note: "Lowest ball first, pot the 9 to win", cloth: "#1673b8", wood: "#161412", balls: ["#f2b705", "#1d3fae", "#7a1f1a", "#f2b705"] },
 ];
 
 const cfg = { game: "snooker", opp: "medium", bestOf: 1, guides: "full", sound: true, quality: "high" };
 let T, S, W, view, mode = "menu", aim = 0, pitch = 0, spin = { x: 0, y: 0 }, viewMode = "aim";
 let cpu = null, follow = null, place = null, lastEvent = 0, frameFirst = 0, match = null, between = 0;
 
-// ---------------------------------------------------------------- sound (synthesised clicks)
+// ---------------------------------------------------------------- sound (synthesised, no files)
+// Each contact is a short shaped burst: balls give a hard "clack", cushions a dull thump,
+// pockets a drop and rattle, the cue tip a soft "tock". Louder for harder contacts.
 const Snd = {
-  ctx: null,
-  init() { if (!this.ctx) try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} if (this.ctx && this.ctx.state === "suspended") this.ctx.resume(); },
+  ctx: null, noise: null, recent: [],
+  init() {
+    if (!this.ctx) try {
+      const c = this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const n = this.noise = c.createBuffer(1, Math.floor(c.sampleRate * 0.4), c.sampleRate), d = n.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      this.master = c.createGain(); this.master.gain.value = 0.9;
+      const comp = c.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 6;
+      this.master.connect(comp); comp.connect(c.destination);
+    } catch (e) {}
+    if (this.ctx && this.ctx.state === "suspended") this.ctx.resume();
+  },
+  burst(t, dur, vol, type, freq, q) { // filtered noise with a sharp attack
+    const c = this.ctx, src = c.createBufferSource(); src.buffer = this.noise;
+    const f = c.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = q;
+    const g = c.createGain(); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + 0.0015); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(f); f.connect(g); g.connect(this.master); src.start(t, Math.random() * 0.3); src.stop(t + dur + 0.02);
+  },
+  tone(t, dur, vol, f0, f1) {
+    const c = this.ctx, o = c.createOscillator(), g = c.createGain(); o.type = "sine";
+    o.frequency.setValueAtTime(f0, t); if (f1) o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + 0.002); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(this.master); o.start(t); o.stop(t + dur + 0.02);
+  },
   hit(v, kind) {
-    if (!cfg.sound || !this.ctx || v < 0.05) return;
-    const c = this.ctx, t = c.currentTime, g = c.createGain(), vol = Math.min(1, v / 4) * (kind === "cush" ? 0.35 : kind === "cue" ? 0.6 : 0.8);
-    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + (kind === "pot" ? 0.25 : 0.06));
-    const o = c.createOscillator(); o.type = "sine";
-    o.frequency.setValueAtTime(kind === "cush" ? 180 : kind === "pot" ? 90 : kind === "cue" ? 900 : 2600 + Math.random() * 400, t);
-    if (kind === "pot") o.frequency.exponentialRampToValueAtTime(45, t + 0.25);
-    o.connect(g); g.connect(c.destination); o.start(t); o.stop(t + 0.3);
-    if (kind !== "pot") { // a little noise for the click
-      const n = c.createBufferSource(), buf = c.createBuffer(1, 600, c.sampleRate), d = buf.getChannelData(0);
-      for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / 80);
-      n.buffer = buf; const ng = c.createGain(); ng.gain.value = vol * 0.6; n.connect(ng); ng.connect(c.destination); n.start(t);
+    if (!cfg.sound || !this.ctx) return;
+    const c = this.ctx, t = c.currentTime;
+    this.recent = this.recent.filter(x => t - x < 0.06);
+    if (this.recent.length > 5) return; // a busy break shouldn't turn into noise
+    const k = Math.min(1, Math.pow(Math.max(0, v) / 3.2, 0.7));
+    if (kind === "ball") {
+      if (v < 0.06) return; this.recent.push(t);
+      this.burst(t, 0.035, 0.9 * k, "bandpass", 3400 + Math.random() * 500, 1.6);
+      this.tone(t, 0.018, 0.25 * k, 2600 + Math.random() * 300);
+    } else if (kind === "cush") {
+      if (v < 0.08) return; this.recent.push(t);
+      this.burst(t, 0.09, 0.55 * k, "lowpass", 700, 0.8);
+      this.tone(t, 0.08, 0.35 * k, 150, 90);
+    } else if (kind === "pot") {
+      this.recent.push(t);
+      this.tone(t, 0.16, 0.5, 120, 60);
+      this.burst(t, 0.22, 0.35, "lowpass", 500, 0.7);
+      this.burst(t + 0.09, 0.05, 0.18, "bandpass", 1800, 2); // rattle in the drop
+    } else if (kind === "cue") {
+      this.burst(t, 0.03, 0.55 * k + 0.1, "bandpass", 1500, 2.2);
+      this.tone(t, 0.035, 0.22 * k + 0.05, 700, 500);
     }
   },
 };
@@ -62,14 +98,14 @@ function buildMenu() {
   seg("oppPick", [["easy", "Easy"], ["medium", "Medium"], ["hard", "Hard"], ["pro", "Pro"], ["friend", "Friend"]], "opp");
   seg("framePick", [[1, "1"], [3, "3"], [5, "5"]], "bestOf");
   seg("guidePick", [["full", "Full"], ["short", "Short"], ["off", "Off"]], "guides");
-  seg("gfxPick", [["high", "High (glow, HDR)"], ["standard", "Standard (smoother on older phones)"]], "quality", () => view && view.setQuality(cfg.quality));
+  seg("gfxPick", [["high", "High"], ["standard", "Standard"]], "quality", () => view && view.setQuality(cfg.quality));
 }
 $("startBtn").onclick = () => { Snd.init(); startMatch(); };
 $("resumeBtn").onclick = () => { $("menu").hidden = true; };
 $("menuBtn").onclick = () => { $("resumeBtn").hidden = !S || !!S.over; $("menu").hidden = false; };
 $("toMenuBtn").onclick = () => { $("result").hidden = true; $("resumeBtn").hidden = true; $("menu").hidden = false; };
 $("nextBtn").onclick = () => { $("result").hidden = true; if (match.done) startMatch(); else startFrame(); };
-$("soundBtn").onclick = () => { cfg.sound = !cfg.sound; $("soundBtn").textContent = cfg.sound ? "🔊" : "🔈"; Snd.init(); };
+$("soundBtn").onclick = () => { cfg.sound = !cfg.sound; const b = $("soundBtn"); b.setAttribute("aria-pressed", cfg.sound); b.setAttribute("aria-label", cfg.sound ? "Sound on" : "Sound off"); b.querySelector(".wave").style.opacity = cfg.sound ? 1 : 0.15; Snd.init(); };
 
 // ---------------------------------------------------------------- match / frame
 function players() {
@@ -147,7 +183,7 @@ function findFree(z) {
   return { x: T.R * 2, y: T.W / 2 };
 }
 function startAim() {
-  mode = "aim"; pitch = humanPitch;
+  mode = "aim"; pitch = humanPitch; hintsShown++;
   $("placeBar").hidden = true; view.showZone(null);
   if (viewMode === "top" && !userTop) viewMode = "aim";
   const c = cueBall();
@@ -163,10 +199,10 @@ function startAim() {
     if (legal[0]) aim = Math.atan2(legal[0].y - c.y, legal[0].x - c.x);
   }
   camSnap();
-  hint(viewMode === "aim" ? "Drag ← → to aim · ↑ ↓ view · pull the cue on the right to strike" : "Tap or drag to point the cue · pull the cue on the right to strike");
+  hint(viewMode === "aim" ? "Drag left or right to aim, up or down to raise the view. Pull the cue on the right down, then let go to strike." : "Tap or drag to point the cue. Pull the cue on the right down, then let go to strike.");
 }
 let userTop = false, humanPitch = 0.18;
-function camSnap() { viewState.snap = true; $("viewBtn").textContent = viewMode === "top" ? "Behind ball" : "Overhead"; }
+function camSnap() { viewState.snap = true; const b = $("viewBtn"); b.setAttribute("aria-pressed", viewMode === "top"); b.setAttribute("aria-label", viewMode === "top" ? "Behind the ball view" : "Overhead view"); }
 
 // ---------------------------------------------------------------- shooting
 // Power comes from pulling the cue back: the further, the harder (with finer control at the soft end).
@@ -175,7 +211,8 @@ const speedFor = p => T.spec.vmax * (0.025 + 0.975 * Math.pow(p, 1.45));
 function shoot(p = lastPower) {
   if (mode !== "aim") return;
   Snd.init(); lastPower = p;
-  startStroke({ angle: aim, speed: speedFor(p), sx: spin.x, sy: spin.y }, pullGap(p));
+  const boost = S.isBreak && S.game !== "snooker" ? 1.12 : 1; // a full-blooded break
+  startStroke({ angle: aim, speed: speedFor(p) * boost, sx: spin.x, sy: spin.y }, pullGap(p));
 }
 const pullGap = p => T.R * 1.4 + p * T.R * 10;
 function startStroke(d, pulled) {
@@ -187,8 +224,9 @@ const pullEl = $("pull"), pcue = $("pcue"), pfill = $("pfill"), pval = $("pval")
 let pulling = null;
 function showPull(p) {
   const h = pullEl.querySelector(".ptrack").clientHeight * 0.8;
-  pcue.style.transform = `translate(-50%, ${p * h}px)`; pfill.style.height = `${p * 100}%`;
-  pval.textContent = p > 0.005 ? `${Math.round(p * 100)}%` : "Pull";
+  pcue.style.transform = `translate(-50%, ${p * h}px)`; pfill.style.height = `calc(${p * 100}% - 6px)`;
+  pval.textContent = p > 0.005 ? `${Math.round(p * 100)}%` : "PULL";
+  pullEl.classList.toggle("on", p > 0.005);
   pullEl.setAttribute("aria-valuenow", Math.round(p * 100));
 }
 pullEl.addEventListener("pointerdown", e => {
@@ -273,10 +311,10 @@ $("viewBtn").onclick = () => {
   viewMode = viewMode === "top" ? "aim" : "top"; userTop = viewMode === "top"; camSnap();
   hint(mode === "aim" ? (viewMode === "aim" ? "Drag ← → to aim · ↑ ↓ to raise the view" : "Tap or drag to point the cue") : "");
 };
-[["aL2", 1], ["aL1", 0.1], ["aR1", -0.1], ["aR2", -1]].forEach(([id, d]) => {
-  const el = $(id); let t1, t2; const stop = () => { clearTimeout(t1); clearInterval(t2); };
-  const nudge = () => { if (mode === "aim") aim += d * D2R; };
-  el.addEventListener("pointerdown", e => { e.preventDefault(); nudge(); t1 = setTimeout(() => t2 = setInterval(nudge, 60), 350); });
+[["aL", 1], ["aR", -1]].forEach(([id, dir]) => {
+  const el = $(id); let t1, t2, n = 0; const stop = () => { clearTimeout(t1); clearInterval(t2); };
+  const nudge = () => { if (mode !== "aim") return; n++; aim += dir * (n < 12 ? 0.1 : n < 30 ? 0.3 : 1) * D2R; };
+  el.addEventListener("pointerdown", e => { e.preventDefault(); n = 0; nudge(); t1 = setTimeout(() => t2 = setInterval(nudge, 55), 380); });
   ["pointerup", "pointerleave", "pointercancel"].forEach(ev => el.addEventListener(ev, stop));
 });
 window.addEventListener("keydown", e => {
@@ -307,7 +345,8 @@ pad.addEventListener("dblclick", () => setSpin(0, 0));
 // ---------------------------------------------------------------- HUD + messages
 let toastTimer = 0, toastT = null;
 function toast(text, foul) { const t = $("toast"); t.textContent = text; t.classList.toggle("foul", !!foul); t.classList.add("show"); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove("show"), 3400); }
-function hint(t) { $("hint").textContent = t; $("hint").hidden = !t; }
+let hintsShown = 0;
+function hint(t) { if (t && hintsShown > 3) t = ""; $("hint").textContent = t; $("hint").hidden = !t; }
 function hud() {
   if (!S) return;
   const g = S.game;
@@ -316,9 +355,12 @@ function hud() {
     el.classList.toggle("on", S.turn === i && !S.over);
     el.querySelector(".nm").textContent = S.players[i].name;
     let sub = "";
-    if (g === "snooker") {
+    if (g === "nine") {
+      el.querySelector(".sc").textContent = match ? match.frames[i] : 0; el.querySelector(".sc").style.fontSize = "";
+      sub = "racks";
+    } else if (g === "snooker") {
       el.querySelector(".sc").textContent = S.scores[i];
-      sub = S.turn === i && S.brk ? `Break ${S.brk}` : "";
+      sub = S.high && S.high[i] ? `High ${S.high[i]}` : "";
     } else {
       const grp = S.groups[i], left = Rules.shotsLeft(S, i);
       el.querySelector(".sc").textContent = grp ? (grp[0].toUpperCase() + grp.slice(1) + "s") : "–";
@@ -329,12 +371,14 @@ function hud() {
     }
     el.querySelector(".sub").innerHTML = sub;
   }
-  $("frames").textContent = match ? `${match.frames[0]} (${match.bestOf}) ${match.frames[1]}` : "";
-  $("onTxt").textContent = S.over ? "Frame over" : `On: ${Rules.ballOnText(S)}`;
+  $("frames").textContent = match ? (match.bestOf > 1 ? `${match.frames[0]} (${match.bestOf}) ${match.frames[1]}` : "Frame") : "";
+  $("onTxt").textContent = S.over ? "Frame over" : `On ${Rules.ballOnText(S)}`;
   if (g === "snooker") {
     const reds = S.balls.filter(b => b.on && Rules.def(g, b.id).kind === "red").length;
-    $("leftTxt").textContent = `${reds} red${reds === 1 ? "" : "s"} · ${Rules.pointsLeft(S)} left`;
-  } else $("leftTxt").textContent = S.isBreak ? "Break" : S.freeTable ? "Free table" : "";
+    $("leftTxt").innerHTML = `<span><b>${reds}</b> red${reds === 1 ? "" : "s"}</span><span><b>${Rules.pointsLeft(S)}</b> on the table</span>${S.brk ? `<span>Break <b>${S.brk}</b></span>` : ""}`;
+  } else if (g === "nine") {
+    $("leftTxt").innerHTML = S.balls.filter(b => b.on && b.id).sort((a, b) => a.id - b.id).map(b => { const d = Rules.def(g, b.id); return `<span class="dot ${d.kind === "stripe" ? "stripe" : ""}" style="background:${d.color};--c:${d.color}"></span>`; }).join("");
+  } else $("leftTxt").innerHTML = S.isBreak ? "<span>Break off</span>" : S.freeTable ? "<span><b>Free table</b></span>" : "";
   const me = S.players[S.turn];
   $("turnChip").textContent = S.over ? "" : me.type === "human" ? (S.players[1].type === "human" ? `${me.name} to play` : "Your shot") : `${me.name}`;
   $("turnChip").classList.toggle("me", me.type === "human");

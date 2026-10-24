@@ -12,24 +12,26 @@ export const SPECS = {
     name: "Snooker", L: 3.569, W: 1.778, R: 0.02625, cw: 0.05,
     corner: { mouth: 0.088, taper: 0.10, fall: 0.62, knuckle: 0.012, dropR: 0.050 },
     middle: { mouth: 0.100, spread: 0.36, fall: 0.30, knuckle: 0.016, dropR: 0.054 },
-    mu: { slide: 0.2, roll: 0.0095, spin: 14, ball: 0.05, cushion: 0.18 },
-    e: { ball: 0.94, cushion: 0.74 }, vmax: 7.0,
+    mu: { slide: 0.2, roll: 0.016, spin: 16, ball: 0.05, cushion: 0.18 },
+    e: { ball: 0.94, cushion: 0.72 }, vmax: 7.0,
   },
   uk: {
     name: "UK 8-ball", L: 1.83, W: 0.915, R: 0.0254, cw: 0.042,
     corner: { mouth: 0.092, taper: 0.08, fall: 0.55, knuckle: 0.012, dropR: 0.050 },
     middle: { mouth: 0.098, spread: 0.34, fall: 0.30, knuckle: 0.014, dropR: 0.052 },
-    mu: { slide: 0.2, roll: 0.012, spin: 14, ball: 0.05, cushion: 0.18 },
-    e: { ball: 0.94, cushion: 0.76 }, vmax: 7.5,
+    mu: { slide: 0.2, roll: 0.02, spin: 16, ball: 0.05, cushion: 0.18 },
+    e: { ball: 0.94, cushion: 0.76 }, vmax: 8.5,
   },
   us: {
     name: "US 8-ball", L: 2.24, W: 1.12, R: 0.028575, cw: 0.05,
     corner: { mouth: 0.118, taper: 0.12, fall: 0.45, knuckle: 0.008, dropR: 0.062 },
     middle: { mouth: 0.132, spread: 0.30, fall: 0.30, knuckle: 0.010, dropR: 0.066 },
-    mu: { slide: 0.2, roll: 0.011, spin: 14, ball: 0.05, cushion: 0.18 },
-    e: { ball: 0.95, cushion: 0.78 }, vmax: 9.0,
+    mu: { slide: 0.2, roll: 0.018, spin: 16, ball: 0.05, cushion: 0.18 },
+    e: { ball: 0.95, cushion: 0.78 }, vmax: 10.0,
   },
 };
+
+SPECS.nine = { ...SPECS.us, name: "9-ball" };
 
 // ---------------------------------------------------------------- small vector helpers
 const hyp = Math.hypot;
@@ -128,11 +130,11 @@ export class World {
   setBalls(list) { // list: [{id,x,y,on}]
     this.balls = list.map(b => ({ id: b.id, x: b.x, y: b.y, on: b.on !== false, vx: 0, vy: 0, wx: 0, wy: 0, wz: 0, pocket: -1 }));
     this.byId = new Map(this.balls.map(b => [b.id, b]));
-    this.events = []; this.time = 0;
+    this.events = []; this.time = 0; this.order = null;
   }
   clone() {
     const w = new World(this.t);
-    w.balls = this.balls.map(b => ({ ...b })); w.byId = new Map(w.balls.map(b => [b.id, b]));
+    w.balls = this.balls.map(b => ({ ...b })); w.byId = new Map(w.balls.map(b => [b.id, b])); w.order = null;
     w.events = []; w.time = 0; return w;
   }
   ball(id) { return this.byId.get(id); }
@@ -191,13 +193,18 @@ export class World {
       if (b.wz) b.wz = Math.abs(b.wz) <= dz ? 0 : b.wz - Math.sign(b.wz) * dz;
       b.x += b.vx * h; b.y += b.vy * h;
     }
-    this.collideBalls();
+    // a tight pack passes energy through several balls in one step, so repeat until nothing is still closing
+    for (let it = 0; it < 8; it++) if (!this.collideBalls()) break;
     this.collideCushions();
     this.checkPockets();
   }
 
   collideBalls() {
-    const bs = this.balls, R = this.t.R, D = 2 * R, D2 = D * D, S = this.t.spec, h = this.h || 0.004, hmax = h * 1.5;
+    let any = false;
+    const R = this.t.R, D = 2 * R, D2 = D * D, S = this.t.spec, h = this.h || 0.004, hmax = h * 1.5;
+    // work through the balls in a fresh random order each pass so a packed rack spreads evenly
+    const bs = this.order || (this.order = this.balls.slice());
+    for (let i = bs.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0, t = bs[i]; bs[i] = bs[j]; bs[j] = t; }
     for (let i = 0; i < bs.length; i++) {
       const a = bs[i]; if (!a.on) continue;
       for (let j = i + 1; j < bs.length; j++) {
@@ -235,13 +242,15 @@ export class World {
             const dw = -2.5 / R * jt * (nx * uy - ny * ux);
             a.wz += dw; b.wz += dw;
           }
-          this.events.push({ t: "hit", a: a.id, b: b.id, time: this.time, v: vn });
+          if (vn > 0.002) this.events.push({ t: "hit", a: a.id, b: b.id, time: this.time, v: vn });
+          any = true;
         }
         if (tau) { a.x += a.vx * tau; a.y += a.vy * tau; b.x += b.vx * tau; b.y += b.vy * tau; }
         const fx = b.x - a.x, fy = b.y - a.y, fd = Math.hypot(fx, fy);
         if (fd < D) { const ov = (D - fd) / 2 + 1e-7, qx = fx / (fd || 1), qy = fy / (fd || 1); a.x -= qx * ov; a.y -= qy * ov; b.x += qx * ov; b.y += qy * ov; }
       }
     }
+    return any;
   }
 
   collideCushions() {

@@ -170,7 +170,7 @@ export class View {
     const clothMat = new THREE.MeshStandardMaterial({ color: 0xffffff, map: clothTex(st.cloth, [L * 6, W * 6]), roughness: .92, envMapIntensity: .1 });
     const bed = new THREE.Shape(); bed.moveTo(-cw, -cw); bed.lineTo(L + cw, -cw); bed.lineTo(L + cw, W + cw); bed.lineTo(-cw, W + cw); bed.closePath();
     table.pockets.forEach(p => { const h = new THREE.Path(); h.absarc(p.drop.x, p.drop.y, p.drop.r, 0, Math.PI * 2, true); bed.holes.push(h); });
-    const cloth = new THREE.Mesh(new THREE.ShapeGeometry(bed, 48), clothMat); cloth.rotation.x = -Math.PI / 2; cloth.receiveShadow = true; G.add(cloth);
+    const cloth = new THREE.Mesh(new THREE.ShapeGeometry(bed, 48), clothMat); cloth.rotation.x = -Math.PI / 2; cloth.receiveShadow = true; cloth.castShadow = true; G.add(cloth);
     // soft shading along the cushions and round the drops
     const ao = canvasTex(128, 128, (g, w, h) => { const gr = g.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2); gr.addColorStop(0, "rgba(0,0,0,.7)"); gr.addColorStop(.6, "rgba(0,0,0,.5)"); gr.addColorStop(1, "rgba(0,0,0,0)"); g.fillStyle = gr; g.fillRect(0, 0, w, h); });
     const aoMat = new THREE.MeshBasicMaterial({ map: ao, transparent: true, depthWrite: false });
@@ -219,7 +219,7 @@ export class View {
     const rg = new THREE.ExtrudeGeometry(outer, { depth: rh - bevR * 2, bevelEnabled: true, bevelThickness: bevR, bevelSize: bevR, bevelOffset: -bevR, bevelSegments: 4, curveSegments: 40 });
     const rail = new THREE.Mesh(rg, woodMat); rail.rotation.x = -Math.PI / 2; rail.position.y = bevR; rail.castShadow = rail.receiveShadow = true; G.add(rail);
     const apronMat = new THREE.MeshStandardMaterial({ color: 0xffffff, map: woodTex(new THREE.Color(st.wood).multiplyScalar(.75).getHex()), roughness: .5 });
-    const apron = new THREE.Mesh(new THREE.BoxGeometry(L + 2 * ox - 0.01, 0.24, W + 2 * ox - 0.01), apronMat); apron.position.copy(V3(L / 2, -0.145, W / 2)); // kept well below the cloth so the two never flicker G.add(apron);
+    const apron = new THREE.Mesh(new THREE.BoxGeometry(L + 2 * ox - 0.01, 0.24, W + 2 * ox - 0.01), apronMat); apron.castShadow = true; apron.position.copy(V3(L / 2, -0.145, W / 2)); // kept well below the cloth so the two never flicker G.add(apron);
     const legs = L > 3 ? [[0.2, 0.15], [L / 2, 0.15], [L - 0.2, 0.15], [0.2, W - 0.15], [L / 2, W - 0.15], [L - 0.2, W - 0.15]] : [[0.15, 0.12], [L - 0.15, 0.12], [0.15, W - 0.12], [L - 0.15, W - 0.12]];
     legs.forEach(([x, y]) => { const g = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.055, 0.6, 18), apronMat); g.position.copy(V3(x, -0.54, y)); G.add(g); });
     if (st.diamonds) {
@@ -316,7 +316,7 @@ export class View {
     const sides = st.crowd ? [[0, -1, bx * 2 + 4.2], [0, 1, bx * 2 + 4.2], [-1, 0, by * 2 + 4.2], [1, 0, by * 2 + 4.2]] : [];
     sides.forEach(([sx, sy, len]) => {
       for (let r = 0; r < 7; r++) {
-        const dist = (sx ? bx : by) + 2.6 + r * 0.75, h = -0.55 + r * 0.42;
+        const dist = (sx ? bx : by) + 3.6 + r * 0.75, h = -0.55 + r * 0.42;
         const step = new THREE.Mesh(new THREE.BoxGeometry(sx ? 0.75 : len + r * 1.5, 0.42, sx ? len + r * 1.5 : 0.75), tier);
         step.position.copy(V3(mx + sx * dist, h - 0.21 - 0.3, my + sy * dist)); G.add(step);
         for (let k = -len / 2 - r * 0.7; k < len / 2 + r * 0.7; k += 0.42 + Math.random() * 0.2) {
@@ -418,10 +418,12 @@ export class View {
     this.cue = new THREE.Group(); this.cue.add(inner); this.cueInner = g; this.group.add(this.cue); this.cue.visible = false;
   }
   buildGuides() {
-    const mk = (color, op) => new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(1, 0, 0)]), new THREE.LineBasicMaterial({ color, transparent: true, opacity: op }));
-    this.guide = { aim: mk(0xffffff, .75), obj: mk(0xffd66b, .8), cue: mk(0xffffff, .45) };
+    // guide lines are flat strips of a fixed width on the cloth, so they stay visible on sharp phone screens
     const R = this.table.R;
-    this.guide.ghost = new THREE.Mesh(new THREE.RingGeometry(R - 0.0012, R + 0.0002, 40), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: .85, side: THREE.DoubleSide }));
+    const mk = (color, op, width) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: op, depthWrite: false })); m.userData.w = width; m.renderOrder = 3; return m; };
+    this.guide = { aim: mk(0xffffff, .55, R * 0.12), obj: mk(0xffd66b, .9, R * 0.16), cue: mk(0xbfe3ff, .7, R * 0.12) };
+    this.guide.ghost = new THREE.Mesh(new THREE.RingGeometry(R * 0.9, R * 1.02, 48), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: .9, side: THREE.DoubleSide, depthWrite: false }));
+    this.guide.ghost.renderOrder = 3;
     this.guide.ghost.rotation.x = -Math.PI / 2;
     const glowTex = canvasTex(64, 256, (g, w, h) => {
       for (let y = 0; y < h; y++) {
@@ -485,7 +487,13 @@ export class View {
   }
   setGuides(g) {
     const G = this.guide, h = 0.004;
-    const line = (o, a, b) => { o.visible = !!a; if (a) o.geometry.setFromPoints([V3(a.x, h, a.y), V3(b.x, h, b.y)]); };
+    const line = (o, a, b) => {
+      o.visible = !!(a && b); if (!o.visible) return;
+      const dx = b.x - a.x, dy = b.y - a.y, l = Math.hypot(dx, dy); if (l < 1e-4) { o.visible = false; return; }
+      o.position.copy(V3((a.x + b.x) / 2, h, (a.y + b.y) / 2));
+      o.rotation.set(-Math.PI / 2, 0, Math.atan2(dy, dx));
+      o.scale.set(l, o.userData.w, 1);
+    };
     line(G.aim, g && g.from, g && g.to);
     line(G.obj, g && g.objFrom, g && g.objTo);
     line(G.cue, g && g.cueFrom, g && g.cueTo);
@@ -498,7 +506,7 @@ export class View {
       G.glow.position.copy(V3(sx, h + 0.001, sy));
       G.glow.rotation.set(-Math.PI / 2, 0, Math.atan2(uy, ux) - Math.PI / 2);
       G.glow.scale.set(this.table.R * 1.8, len, 1);
-      G.aim.material.opacity = 0.35;
+      G.aim.material.opacity = 0.5;
     }
   }
   showZone(z) {
@@ -528,7 +536,7 @@ export class View {
     const { L, W, R } = this.table, w = this.host.clientWidth, h = this.host.clientHeight;
     if (!w || !h) return;
     const snap = v.snap; v.snap = false;
-    this.canopy.forEach(m => m.visible = v.mode !== "top" && v.mode !== "tv");
+    this.canopy.forEach(m => m.visible = v.mode !== "top" && v.mode !== "tv" && v.mode !== "follow" && (v.pitch || 0) < 0.35);
     if (v.mode === "tv") { // high broadcast view from behind the baulk end
       const portrait = w < h; this.camera.fov = portrait ? 50 : 44; this.camera.clearViewOffset();
       const back = portrait ? 0.9 + L * 0.42 : 0.8 + L * 0.36, hgt = portrait ? 1.2 + L * 0.42 : 1.25 + L * 0.42;

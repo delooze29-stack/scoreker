@@ -23,6 +23,8 @@ function defsFor(game) {
     for (let i = 1; i <= 7; i++) d.push({ id: i, kind: "red", name: "red", color: "#c8141c" });
     for (let i = 8; i <= 14; i++) d.push({ id: i, kind: "yellow", name: "yellow", color: "#f2c200" });
     d.push({ id: 15, kind: "black", name: "black", color: "#111111", num: 8 });
+  } else if (game === "nine") {
+    for (let n = 1; n <= 9; n++) d.push({ id: n, kind: n === 9 ? "stripe" : "solid", num: n, name: `${n}-ball`, color: US_COLORS[n > 8 ? n - 8 : n] });
   } else {
     for (let n = 1; n <= 15; n++) {
       const kind = n === 8 ? "eight" : n < 8 ? "solid" : "stripe";
@@ -47,9 +49,11 @@ export function marks(game) {
 }
 
 function rack(game) {
-  const S = SPECS[game], R = S.R, W = S.W, L = S.L, g = 0.0004;
+  const S = SPECS[game], R = S.R, W = S.W, L = S.L, g = 0.00005;
   const out = [];
-  const at = (apexX, k, j) => ({ x: apexX + k * (SQ3 * R + g), y: W / 2 + (j - k / 2) * (2 * R + g) });
+  // racks are never perfect: tiny random gaps make the pack break up the way a real one does
+  const jit = () => (Math.random() - 0.5) * 0.0004;
+  const at = (apexX, k, j) => ({ x: apexX + k * (SQ3 * R + g + 0.0004) + jit(), y: W / 2 + (j - k / 2) * (2 * R + g + 0.0004) + jit() });
   if (game === "snooker") {
     const m = marks(game), apex = m.spots[6].x + 2 * R + 0.003;
     let id = 1;
@@ -65,6 +69,14 @@ function rack(game) {
       out.push({ id, ...at(L * 0.75, k, j) });
     }));
     out.push({ id: 0, x: L * 0.2 - 0.08, y: W / 2 + 0.05 });
+  } else if (game === "nine") { // diamond: 1 at the front, 9 in the middle, the rest shuffled
+    const rest = [2, 3, 4, 5, 6, 7, 8].sort(() => Math.random() - 0.5);
+    const pattern = [[1], [rest[0], rest[1]], [rest[2], 9, rest[3]], [rest[4], rest[5]], [rest[6]]];
+    pattern.forEach((row, k) => row.forEach((id, j) => {
+      const width = k <= 2 ? k : 4 - k; // rows 1,2,3,2,1
+      out.push({ id, x: L * 0.75 + k * (SQ3 * R + g + 0.0004) + jit(), y: W / 2 + (j - width / 2) * (2 * R + g + 0.0004) + jit() });
+    }));
+    out.push({ id: 0, x: L * 0.25 - 0.1, y: W / 2 });
   } else {
     const pattern = [[1], [9, 2], [10, 8, 3], [11, 4, 12, 5], [6, 13, 7, 14, 15]];
     pattern.forEach((row, k) => row.forEach((id, j) => out.push({ id, ...at(L * 0.75, k, j) })));
@@ -81,6 +93,7 @@ export function createGame(game, players, opts = {}) {
     ballInHand: { zone: game === "snooker" ? "D" : "baulk" },
   };
   if (game === "snooker") Object.assign(s, { ballOn: "red", brk: 0, high: [0, 0] });
+  else if (game === "nine") Object.assign(s, { groups: [null, null], visits: 1, freeTable: false });
   else Object.assign(s, { groups: [null, null], visits: 1, freeTable: false });
   return s;
 }
@@ -109,8 +122,10 @@ export function placeCue(s, x, y) { const c = ballOf(s, 0); c.x = x; c.y = y; c.
 
 // ---------------------------------------------------------------- what may be hit / potted
 // Balls the striker may legally hit first.
+const lowest = s => { const on = s.balls.filter(b => b.on && b.id); return on.length ? Math.min(...on.map(b => b.id)) : null; };
 export function legalFirst(s) {
   const g = s.game;
+  if (g === "nine") { const l = lowest(s); return l ? [l] : []; }
   if (g === "snooker") {
     if (s.ballOn === "red") return onTable(s, d => d.kind === "red").map(b => b.id);
     if (s.ballOn === "colour") return onTable(s, d => d.kind === "colour").map(b => b.id);
@@ -126,6 +141,7 @@ export function legalFirst(s) {
 // Balls the striker wants to pot this shot.
 export function wantPot(s) {
   const g = s.game;
+  if (g === "nine") return s.balls.filter(b => b.on && b.id).map(b => b.id);
   if (g === "snooker") return legalFirst(s);
   const grp = s.groups[s.turn], blackKind = g === "uk" ? "black" : "eight";
   if (!grp) return onTable(s, d => d.kind !== blackKind).map(b => b.id);
@@ -133,6 +149,7 @@ export function wantPot(s) {
   return (mine.length ? mine : onTable(s, d => d.kind === blackKind)).map(b => b.id);
 }
 export function ballOnText(s) {
+  if (s.game === "nine") { const l = lowest(s); return l ? `the ${l}` : "—"; }
   if (s.game === "snooker") {
     if (s.ballOn === "red") return "red";
     if (s.ballOn === "colour") return "a colour";
@@ -155,7 +172,7 @@ export function pointsLeft(s) {
 export function resolve(s0, sum) {
   const s = clone(s0);
   s.shots++;
-  const info = s.game === "snooker" ? resolveSnooker(s, sum) : resolvePool(s, sum);
+  const info = s.game === "snooker" ? resolveSnooker(s, sum) : s.game === "nine" ? resolveNine(s, sum) : resolvePool(s, sum);
   s.isBreak = false;
   s.lastText = info.text;
   return { state: s, info };
@@ -259,7 +276,7 @@ function resolvePool(s, sum) {
   else if (!legal.has(first)) foul = `hit the ${d(first).kind === blackKind ? blackName : d(first).name} first`;
   if (pots.includes(0)) foul = foul || "potted the cue ball";
   if (grp && pots.some(id => id && d(id).kind !== grp && d(id).kind !== blackKind)) foul = foul || "potted an opponent's ball";
-  if (g === "us" && !foul && !pots.length && !sum.cushionAfterHit && !s.isBreak) foul = "no ball reached a cushion";
+  if (g === "us" && !foul && !pots.length && !sum.cushionAfterHit && !s.isBreak) foul = "didn't send a ball to a cushion";
   const blackDown = pots.some(id => id && d(id).kind === blackKind);
   let text;
 
@@ -302,9 +319,39 @@ function resolvePool(s, sum) {
   return { foul: null, text, potted: pots, keep: false };
 }
 
+// 9-ball: hit the lowest ball first; anything potted on a legal shot keeps you at the table;
+// pot the 9 legally (even in a combination) to win. Any foul gives ball in hand anywhere.
+function resolveNine(s, sum) {
+  const me = s.turn, opp = 1 - me, first = sum.first, pots = sum.pots;
+  const before = s.balls.filter(b => b.id && (b.on || pots.includes(b.id))).map(b => b.id);
+  const low = before.length ? Math.min(...before) : null;
+  let foul = null;
+  if (first === null) foul = "missed every ball";
+  else if (first !== low) foul = `hit the ${first} first instead of the ${low}`;
+  if (pots.includes(0)) foul = foul || "potted the cue ball";
+  if (!foul && !pots.length && !sum.cushionAfterHit && !s.isBreak) foul = "didn't send a ball to a cushion";
+  const nineDown = pots.includes(9);
+  if (nineDown && !foul) {
+    s.over = { winner: me, text: `${nameOf(s, me)} potted the 9 and ${vb(s, me, "wins", "win")} the rack.` };
+    return { foul: null, text: s.over.text, potted: pots, keep: false };
+  }
+  if (nineDown) { // a foul brings the 9 back to its spot
+    const f = marks(s.game).foot; let x = f.x; while (!freeSpot(s, x, f.y)) x += 0.002;
+    Object.assign(ballOf(s, 9), { x, y: f.y, on: true });
+  }
+  if (foul) {
+    s.turn = opp; s.ballInHand = { zone: "any" }; ballOf(s, 0).on = false;
+    return { foul, text: `Foul: ${nameOf(s, me)} ${foul}. ${nameOf(s, opp)} ${vb(s, opp, "has", "have")} ball in hand.`, potted: pots, keep: false };
+  }
+  const real = pots.filter(id => id);
+  if (real.length) return { foul: null, text: `${nameOf(s, me)} potted the ${real.join(" and the ")}.`, potted: pots, keep: true };
+  s.turn = opp;
+  return { foul: null, text: `${nameOf(s, me)} missed. ${nameOf(s, opp)} to play.`, potted: [], keep: false };
+}
+
 // Short status for the scoreboard.
 export function shotsLeft(s, player) {
-  if (s.game === "snooker") return null;
+  if (s.game === "snooker" || s.game === "nine") return null;
   const grp = s.groups[player]; if (!grp) return null;
   return s.balls.filter(b => b.on && b.id && def(s.game, b.id).kind === grp).map(b => b.id);
 }

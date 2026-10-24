@@ -11,11 +11,14 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:wght@500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-/* ScoreKer palette. Layout: scoreboard strip, 3D table filling the screen, control dock at the bottom. */
+/* ScoreKer palette. Layout: the table fills the screen; a broadcast-style score bar floats at the top,
+   the cue ball (spin) and fine aim sit bottom-left, the pull-back cue runs down the right edge. */
 :root{
-  --bg:#07090a; --panel:rgba(14,22,17,.92); --card:#121C16; --card2:#16231C; --line:#1F2E25; --line2:#2C3D33;
+  --bg:#07090a; --card:#121C16; --card2:#16231C; --line:#1F2E25; --line2:#2C3D33;
   --text:#EDEFE9; --soft:#D6DDD8; --muted:#A9B5AD; --amber:#F5B700; --ink:#1A1300; --good:#7FE0A0; --bad:#FF8A80; --chalk:#7FB8E6;
+  --glass:rgba(10,14,20,.66); --glass2:rgba(10,14,20,.82); --edge:rgba(255,255,255,.14);
   --display:'Bebas Neue',"Arial Narrow",Impact,sans-serif; --body:'IBM Plex Sans',system-ui,-apple-system,"Segoe UI",sans-serif; --mono:'IBM Plex Mono',ui-monospace,Menlo,monospace;
+  --st:env(safe-area-inset-top,0px); --sr:env(safe-area-inset-right,0px); --sb:env(safe-area-inset-bottom,0px); --sl:env(safe-area-inset-left,0px);
   color-scheme:dark;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -24,66 +27,80 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--text);overflow:h
 body{font-family:var(--body);font-size:14px;-webkit-text-size-adjust:100%;user-select:none;-webkit-user-select:none}
 button,input{font:inherit}
 :focus-visible{outline:2px solid var(--amber);outline-offset:2px}
-#app{position:fixed;inset:0;display:flex;flex-direction:column;padding:env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left)}
+.glass{background:var(--glass);border:1px solid var(--edge);backdrop-filter:blur(10px) saturate(1.2);-webkit-backdrop-filter:blur(10px) saturate(1.2);box-shadow:0 6px 22px rgba(0,0,0,.35)}
 
-/* scoreboard */
-.hud{display:grid;grid-template-columns:1fr auto 1fr;align-items:stretch;background:linear-gradient(#0d1511,#0a100d);border-bottom:1px solid var(--line);min-height:58px}
-.pl{display:flex;flex-direction:column;justify-content:center;padding:6px 12px;position:relative;min-width:0}
-.pl.right{align-items:flex-end;text-align:right}
-.pl .nm{font-size:12px;font-weight:600;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
-.pl .sc{font-family:var(--display);font-size:30px;line-height:1;letter-spacing:.5px;font-variant-numeric:tabular-nums}
-.pl .sub{font-size:11px;color:var(--muted);min-height:14px;display:flex;gap:3px;align-items:center;flex-wrap:wrap}
-.pl.right .sub{justify-content:flex-end}
-.pl.on .nm{color:var(--amber)}
-.pl.on::after{content:"";position:absolute;left:12px;right:12px;bottom:0;height:3px;background:var(--amber);border-radius:3px 3px 0 0}
-.dot{width:10px;height:10px;border-radius:50%;display:inline-block;box-shadow:inset -2px -2px 3px rgba(0,0,0,.35)}
-.dot.stripe{background:#f4f1e6!important;position:relative;overflow:hidden}
-.dot.stripe::after{content:"";position:absolute;left:0;right:0;top:3px;height:4px;background:var(--c)}
-.mid{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:4px 6px;text-align:center}
-.mid .fr{font-family:var(--mono);font-size:12px;color:var(--soft);white-space:nowrap}
-.mid .on{font-size:12px;font-weight:600;white-space:nowrap}
-.mid .left{font-size:11px;color:var(--muted);white-space:nowrap}
-
-/* stage */
-#stage{position:relative;flex:1;min-height:0;touch-action:none;overflow:hidden;background:#050607}
+#stage{position:fixed;inset:0;touch-action:none;overflow:hidden;background:#050607}
 #stage canvas{display:block;width:100%;height:100%}
-.chip{position:absolute;pointer-events:none;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;background:rgba(5,8,6,.7);border:1px solid rgba(255,255,255,.12);border-radius:999px;padding:5px 10px;color:var(--soft)}
-#turnChip{left:10px;top:10px}
-#turnChip.me{color:var(--ink);background:var(--amber);border-color:var(--amber)}
-.toast{position:absolute;left:50%;top:44px;transform:translateX(-50%);max-width:min(92%,520px);background:rgba(8,12,10,.9);border:1px solid rgba(255,255,255,.14);border-radius:10px;padding:8px 14px;font-size:13px;line-height:1.35;text-align:center;opacity:0;transition:opacity .25s;pointer-events:none}
-.toast.show{opacity:1}
-.toast.foul{border-color:rgba(255,138,128,.6)}
-.toast b{color:var(--amber)}
-.stagebtn{position:absolute;appearance:none;border:1px solid rgba(255,255,255,.16);background:rgba(8,12,10,.78);color:var(--text);border-radius:8px;padding:7px 11px;font-size:12px;font-weight:600;cursor:pointer;min-height:34px}
-#viewBtn{right:10px;top:10px}
-#menuBtn{right:10px;top:50px}
-#soundBtn{right:10px;top:90px;min-width:34px}
-.inset{position:absolute;right:74px;bottom:14px;width:clamp(150px,40%,250px);background:rgba(5,8,6,.82);border:1px solid rgba(255,255,255,.14);border-radius:10px;overflow:hidden;pointer-events:none}
-.inset canvas{width:100%;height:auto;display:block}
-.inset .cap{font-family:var(--mono);font-size:11px;color:var(--chalk);padding:2px 8px 5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.hint{position:absolute;left:10px;top:44px;font-size:12px;color:rgba(237,239,233,.8);background:rgba(5,8,6,.6);padding:4px 9px;border-radius:6px;pointer-events:none;max-width:52%}
-.placebar{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);display:flex;gap:10px;align-items:center;background:rgba(8,12,10,.9);border:1px solid rgba(255,255,255,.14);border-radius:12px;padding:8px 8px 8px 14px;font-size:13px;white-space:nowrap}
-.think{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);background:rgba(8,12,10,.85);border-radius:999px;padding:7px 14px;font-size:12px;color:var(--soft)}
+
+/* score bar */
+.hud{position:absolute;left:50%;top:calc(8px + var(--st));transform:translateX(-50%);width:min(calc(100% - 16px),620px);border-radius:14px;overflow:hidden;z-index:3;pointer-events:none}
+.bar{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:stretch}
+.pl{display:flex;align-items:center;gap:8px;padding:7px 10px;min-width:0;position:relative}
+.pl.right{flex-direction:row-reverse;text-align:right}
+.pl .who{min-width:0;flex:1}
+.pl .nm{font-size:12px;font-weight:600;color:var(--soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pl .sub{font-size:11px;color:var(--muted);min-height:13px;display:flex;gap:3px;align-items:center;flex-wrap:wrap;margin-top:1px}
+.pl.right .sub{justify-content:flex-end}
+.pl .sc{font-family:var(--display);font-size:30px;line-height:1;min-width:1.6em;text-align:center;font-variant-numeric:tabular-nums;background:rgba(255,255,255,.06);border-radius:8px;padding:3px 6px 1px}
+.pl.on .sc{background:var(--amber);color:var(--ink)}
+.pl.on .nm{color:#fff}
+.pl.on::after{content:"";position:absolute;top:50%;width:6px;height:6px;border-radius:50%;background:var(--amber);box-shadow:0 0 8px var(--amber);transform:translateY(-50%)}
+.pl:not(.right).on::after{left:3px}.pl.right.on::after{right:3px}
+.dot{width:9px;height:9px;border-radius:50%;display:inline-block;box-shadow:inset -2px -2px 3px rgba(0,0,0,.35)}
+.dot.stripe{background:#f4f1e6!important;position:relative;overflow:hidden}
+.dot.stripe::after{content:"";position:absolute;left:0;right:0;top:2.5px;height:4px;background:var(--c)}
+.mid{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:4px 8px;text-align:center;border-left:1px solid var(--edge);border-right:1px solid var(--edge)}
+.mid .fr{font-family:var(--display);font-size:16px;letter-spacing:1px;color:var(--amber);white-space:nowrap;line-height:1.1}
+.mid .on{font-size:11px;font-weight:600;white-space:nowrap;color:var(--soft)}
+.strip{display:flex;justify-content:center;gap:10px;font-size:10.5px;color:var(--muted);padding:3px 8px 4px;border-top:1px solid var(--edge);letter-spacing:.02em}
+.strip:empty{display:none}
+.strip b{color:var(--soft);font-weight:600}
+
+/* stage furniture */
+.turn{position:absolute;left:calc(10px + var(--sl));top:calc(84px + var(--st));font-size:10.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;border-radius:999px;padding:5px 10px;color:var(--soft);pointer-events:none;z-index:2}
+.turn.me{color:var(--ink);background:var(--amber);border-color:transparent}
+.toast{position:absolute;left:50%;top:calc(88px + var(--st));transform:translate(-50%,-6px);max-width:min(88%,480px);border-radius:12px;padding:9px 14px;font-size:13px;line-height:1.35;text-align:center;opacity:0;transition:opacity .25s,transform .25s;pointer-events:none;z-index:4}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+.toast.foul{border-color:rgba(255,138,128,.55)}
+.icons{position:absolute;right:calc(10px + var(--sr));top:calc(84px + var(--st));display:flex;flex-direction:column;gap:8px;z-index:3}
+.ibtn{appearance:none;width:40px;height:40px;border-radius:12px;display:grid;place-items:center;color:var(--text);cursor:pointer;padding:0}
+.ibtn svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.ibtn[aria-pressed="true"]{color:var(--amber)}
+.hint{position:absolute;left:calc(10px + var(--sl));bottom:calc(136px + var(--sb));font-size:12px;color:var(--soft);padding:6px 10px;border-radius:10px;pointer-events:none;max-width:min(60%,320px);line-height:1.35;z-index:2}
+.placebar{position:absolute;left:50%;bottom:calc(16px + var(--sb));transform:translateX(-50%);display:flex;gap:10px;align-items:center;border-radius:14px;padding:8px 8px 8px 14px;font-size:13px;white-space:nowrap;z-index:4}
+.placebar button{appearance:none;border:0;background:var(--amber);color:var(--ink);font-weight:700;border-radius:10px;padding:8px 16px;cursor:pointer}
+.think{position:absolute;left:50%;bottom:calc(16px + var(--sb));transform:translateX(-50%);border-radius:999px;padding:7px 14px;font-size:12px;color:var(--soft);z-index:4}
 .think i{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--amber);margin-right:8px;animation:pulse 1s infinite}
 @keyframes pulse{50%{opacity:.25}}
 
-/* controls */
-.ctl{display:grid;grid-template-columns:auto minmax(0,1fr);gap:12px;align-items:center;padding:10px max(12px,env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left));background:linear-gradient(#0a100d,#0d1511);border-top:1px solid var(--line)}
-#spinPad{width:76px;height:76px;touch-action:none;cursor:pointer;border-radius:50%;display:block}
-.ctlmid{display:flex;flex-direction:column;gap:8px;min-width:0}
-/* pull-back cue for power */
-.pull{position:absolute;right:10px;top:136px;bottom:14px;width:54px;display:flex;flex-direction:column;align-items:center;gap:6px;touch-action:none;cursor:ns-resize;z-index:2}
-.ptrack{position:relative;flex:1;width:32px;border-radius:16px;background:rgba(5,8,6,.72);border:1px solid rgba(255,255,255,.2);overflow:hidden;box-shadow:inset 0 2px 8px rgba(0,0,0,.6)}
-.pfill{position:absolute;left:0;right:0;top:0;height:0;background:linear-gradient(#7FE0A0,#F5B700 55%,#ff5a4e)}
-.pcue{position:absolute;left:50%;top:8px;width:11px;height:82%;transform:translate(-50%,0);border-radius:6px;background:linear-gradient(#23466a 0 1.2%,#f3efe3 1.2% 3.4%,#0d0f12 3.4% 54%,#2a6fe0 54% 55.5%,#0d0f12 55.5% 97%,#b8bcc4 97%);box-shadow:0 2px 6px rgba(0,0,0,.6)}
-.pval{font-family:var(--mono);font-size:11px;color:var(--soft);background:rgba(5,8,6,.72);border-radius:6px;padding:2px 6px;white-space:nowrap}
-.pull.off{opacity:.3;pointer-events:none}
-.pull .arrow{position:absolute;left:50%;bottom:8px;transform:translateX(-50%);font-size:12px;color:rgba(255,255,255,.55);pointer-events:none}
-.aim{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
-.btn{appearance:none;border:1px solid var(--line2);background:var(--card2);color:var(--text);font-size:13px;font-weight:600;padding:8px 4px;border-radius:8px;cursor:pointer;touch-action:manipulation;min-height:38px}
-.btn:active{transform:translateY(1px)}
-.btn:disabled{opacity:.4}
-.spininfo{font-size:10px;color:var(--muted);text-align:center;margin-top:3px;white-space:nowrap}
+/* overlap check */
+.inset{position:absolute;right:calc(70px + var(--sr));bottom:calc(14px + var(--sb));width:clamp(120px,32vw,190px);border-radius:12px;overflow:hidden;pointer-events:none;z-index:2}
+.inset canvas{width:100%;height:auto;display:block}
+.inset .cap{font-size:10.5px;color:var(--soft);padding:3px 8px 5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:center}
+
+/* bottom-left: cue ball (spin) and fine aim */
+.ctl{position:absolute;left:calc(10px + var(--sl));bottom:calc(14px + var(--sb));display:flex;align-items:flex-end;gap:10px;z-index:3}
+.spin{display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 8px 6px;border-radius:16px}
+#spinPad{width:86px;height:86px;touch-action:none;cursor:pointer;border-radius:50%;display:block}
+.spininfo{font-size:10px;color:var(--soft);text-align:center;white-space:nowrap;letter-spacing:.02em}
+.fine{display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px;border-radius:16px}
+.fine .row{display:flex;gap:6px}
+.fine button{appearance:none;width:42px;height:42px;border-radius:12px;border:1px solid var(--edge);background:rgba(255,255,255,.06);color:var(--text);display:grid;place-items:center;cursor:pointer;touch-action:manipulation;padding:0}
+.fine button:active{background:rgba(245,183,0,.25)}
+.fine svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.fine span{font-size:10px;color:var(--soft);letter-spacing:.02em}
+
+/* pull-back cue */
+.pull{position:absolute;right:calc(10px + var(--sr));top:calc(240px + var(--st));bottom:calc(14px + var(--sb));width:50px;display:flex;flex-direction:column;align-items:center;gap:6px;touch-action:none;cursor:ns-resize;z-index:3;border-radius:16px;padding:8px 0 8px;transition:opacity .2s}
+.pull .plabel{font-size:9.5px;font-weight:700;letter-spacing:.16em;color:var(--muted)}
+.ptrack{position:relative;flex:1;width:26px;border-radius:13px;background:linear-gradient(90deg,rgba(0,0,0,.55),rgba(255,255,255,.05) 50%,rgba(0,0,0,.55));border:1px solid rgba(255,255,255,.12);overflow:hidden}
+.pfill{position:absolute;left:3px;right:3px;top:3px;height:0;border-radius:10px;background:linear-gradient(#5fd38a,#F5B700 55%,#ff5a4e);box-shadow:0 0 12px rgba(245,183,0,.5);opacity:.85}
+.ticks{position:absolute;inset:0;pointer-events:none}
+.ticks i{position:absolute;left:4px;right:4px;height:1px;background:rgba(255,255,255,.18)}
+.pcue{position:absolute;left:50%;top:6px;width:14px;height:calc(100% - 12px);transform:translate(-50%,0);filter:drop-shadow(0 3px 4px rgba(0,0,0,.6))}
+.pval{font-family:var(--mono);font-size:11px;color:var(--soft);min-width:40px;text-align:center}
+.pull.on .pval{color:var(--amber)}
+.pull.off{opacity:.35;pointer-events:none}
 
 /* overlays */
 .overlay{position:fixed;inset:0;z-index:20;background:rgba(4,6,5,.86);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);overflow:auto;display:flex;justify-content:center;align-items:flex-start;padding:calc(16px + env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) calc(16px + env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left))}
@@ -92,7 +109,7 @@ button,input{font:inherit}
 .sheet h1{margin:0;font-family:var(--display);font-weight:400;font-size:44px;line-height:.95;letter-spacing:.5px}
 .sheet p{margin:0;color:var(--soft);line-height:1.45}
 .lab{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
-.games{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.games{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
 .game{appearance:none;text-align:left;border:1px solid var(--line2);background:var(--card);color:var(--text);border-radius:12px;padding:10px;cursor:pointer;display:flex;flex-direction:column;gap:6px;min-width:0}
 .game[aria-pressed="true"]{border-color:var(--amber);box-shadow:inset 0 0 0 1px var(--amber)}
 .game b{font-family:var(--display);font-weight:400;font-size:22px;letter-spacing:.5px;line-height:1}
@@ -110,62 +127,82 @@ button,input{font:inherit}
 .big{font-family:var(--display);font-size:40px;line-height:1;letter-spacing:.5px}
 .statgrid{display:grid;grid-template-columns:auto 1fr 1fr;gap:4px 14px;font-family:var(--mono);font-size:13px}
 .statgrid span:nth-child(3n+1){color:var(--muted);font-family:var(--body)}
-@media (max-width:420px){.games{grid-template-columns:minmax(0,1fr)}.game{flex-direction:row;align-items:center}.game .sw{width:64px;flex:none}.ctl{gap:8px}}
-/* phones on their side: the table gets the whole screen, controls float over it */
+@media (max-width:420px){.games{grid-template-columns:minmax(0,1fr)}.game{flex-direction:row;align-items:center}.game .sw{width:64px;flex:none}}
+
+/* phones on their side */
 @media (orientation:landscape) and (max-height:540px){
-  .hud{min-height:44px}.pl .sc{font-size:22px}.pl{padding:3px 12px}.mid .left{display:none}
-  .ctl{position:fixed;left:env(safe-area-inset-left);bottom:0;z-index:3;background:none;border:0;grid-template-columns:auto;gap:8px;padding:0 0 calc(8px + env(safe-area-inset-bottom)) 10px;width:auto}
-  .ctl .aim{grid-template-columns:repeat(2,52px)}
-  #spinPad{width:64px;height:64px}
-  .pull{top:92px}#viewBtn,#menuBtn,#soundBtn{padding:5px 9px;min-height:30px}#menuBtn{top:46px}#soundBtn{top:82px;right:auto;left:10px;top:46px}
-  .inset{width:170px}
-  .hint{left:140px}
+  .hud{width:min(calc(100% - 200px),560px)}.pl .sc{font-size:24px}.pl{padding:5px 9px}.strip{display:none}
+  .turn{top:calc(10px + var(--st));}
+  .toast{top:calc(62px + var(--st))}
+  .icons{top:calc(8px + var(--st));flex-direction:row}
+  .pull{top:calc(58px + var(--st))}
+  .hint{bottom:calc(118px + var(--sb))}
+  #spinPad{width:72px;height:72px}.inset{width:150px}.fine button{width:38px;height:38px}
 }
-@media (min-width:900px){#app{max-width:1300px;margin:0 auto}}
 </style>
 </head>
 <body>
-<div id="app">
-  <header class="hud" aria-live="polite">
-    <div class="pl" id="p0"><div class="nm"></div><div class="sc">0</div><div class="sub"></div></div>
-    <div class="mid"><div class="fr" id="frames"></div><div class="on" id="onTxt"></div><div class="left" id="leftTxt"></div></div>
-    <div class="pl right" id="p1"><div class="nm"></div><div class="sc">0</div><div class="sub"></div></div>
-  </header>
-  <main id="stage" aria-label="Table. Drag left or right to aim, up or down to raise the view.">
-    <div class="chip" id="turnChip"></div>
-    <div class="toast" id="toast"></div>
-    <button class="stagebtn" id="viewBtn" type="button">Overhead</button>
-    <button class="stagebtn" id="menuBtn" type="button">Menu</button>
-    <button class="stagebtn" id="soundBtn" type="button" aria-label="Sound">🔊</button>
-    <div class="inset" id="inset"><canvas id="ov" width="460" height="230"></canvas><div class="cap" id="ovTxt"></div></div>
-    <div class="hint" id="hint"></div>
-    <div class="placebar" id="placeBar" hidden><span id="placeTxt">Drag the cue ball into place</span><button class="btn" id="placeDone" type="button" style="min-height:34px;padding:6px 14px;background:var(--amber);color:var(--ink);border:0">Done</button></div>
-    <div class="think" id="think" hidden><i></i><span id="thinkTxt">Thinking…</span></div>
-    <div class="pull off" id="pull" role="slider" aria-label="Pull the cue back for power, let go to strike" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-      <div class="ptrack"><div class="pfill" id="pfill"></div><div class="pcue" id="pcue"></div><div class="arrow">▼</div></div>
-      <div class="pval" id="pval">Pull</div>
+<main id="stage" aria-label="Table. Drag left or right to aim, up or down to raise the view.">
+  <header class="hud glass" aria-live="polite">
+    <div class="bar">
+      <div class="pl" id="p0"><div class="who"><div class="nm"></div><div class="sub"></div></div><div class="sc">0</div></div>
+      <div class="mid"><div class="fr" id="frames"></div><div class="on" id="onTxt"></div></div>
+      <div class="pl right" id="p1"><div class="who"><div class="nm"></div><div class="sub"></div></div><div class="sc">0</div></div>
     </div>
-  </main>
-  <footer class="ctl">
-    <div>
+    <div class="strip" id="leftTxt"></div>
+  </header>
+  <div class="turn glass" id="turnChip"></div>
+  <div class="toast glass" id="toast"></div>
+  <div class="icons">
+    <button class="ibtn glass" id="viewBtn" type="button" aria-label="Overhead view"><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M4 12h3M17 12h3"/></svg></button>
+    <button class="ibtn glass" id="soundBtn" type="button" aria-label="Sound on" aria-pressed="true"><svg viewBox="0 0 24 24"><path d="M4 10v4h4l5 4V6L8 10H4z"/><path class="wave" d="M16 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11"/></svg></button>
+    <button class="ibtn glass" id="menuBtn" type="button" aria-label="Menu"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+  </div>
+  <div class="inset glass" id="inset"><canvas id="ov" width="380" height="190"></canvas><div class="cap" id="ovTxt"></div></div>
+  <div class="hint glass" id="hint"></div>
+  <div class="placebar glass" id="placeBar" hidden><span id="placeTxt">Drag the cue ball into place</span><button id="placeDone" type="button">Done</button></div>
+  <div class="think glass" id="think" hidden><i></i><span id="thinkTxt">Thinking…</span></div>
+  <div class="pull glass off" id="pull" role="slider" aria-label="Pull the cue back for power, let go to strike" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+    <div class="plabel">POWER</div>
+    <div class="ptrack">
+      <div class="pfill" id="pfill"></div>
+      <div class="ticks"><i style="top:25%"></i><i style="top:50%"></i><i style="top:75%"></i></div>
+      <svg class="pcue" id="pcue" viewBox="0 0 14 400" preserveAspectRatio="none" aria-hidden="true">
+        <defs>
+          <linearGradient id="maple" x1="0" x2="1"><stop offset="0" stop-color="#b98a52"/><stop offset=".45" stop-color="#f2d9a6"/><stop offset="1" stop-color="#a77843"/></linearGradient>
+          <linearGradient id="ebony" x1="0" x2="1"><stop offset="0" stop-color="#0b0b0c"/><stop offset=".45" stop-color="#3a3b40"/><stop offset="1" stop-color="#0b0b0c"/></linearGradient>
+          <linearGradient id="brass" x1="0" x2="1"><stop offset="0" stop-color="#8a6b2a"/><stop offset=".5" stop-color="#f6dd8f"/><stop offset="1" stop-color="#8a6b2a"/></linearGradient>
+        </defs>
+        <rect x="4.6" y="0" width="4.8" height="5" rx="2" fill="#2f5d8a"/>
+        <rect x="4.4" y="5" width="5.2" height="10" fill="#f3efe3"/>
+        <path d="M4.4 15 L9.6 15 L11 215 L3 215 Z" fill="url(#maple)"/>
+        <rect x="2.8" y="215" width="8.4" height="7" fill="url(#brass)"/>
+        <path d="M2.8 222 L11.2 222 L12.4 392 L1.6 392 Z" fill="url(#ebony)"/>
+        <path d="M3.3 250 L7 300 L10.7 250 M3.6 330 L7 360 L10.4 330" fill="none" stroke="#c9a24a" stroke-width=".8"/>
+        <rect x="1.6" y="392" width="10.8" height="8" rx="2" fill="#050505"/>
+      </svg>
+    </div>
+    <div class="pval" id="pval">PULL</div>
+  </div>
+  <div class="ctl">
+    <div class="spin glass">
       <svg id="spinPad" viewBox="-50 -50 100 100" role="img" aria-label="Cue ball. Tap where the tip should strike. Double-tap to reset.">
         <defs><radialGradient id="cbG" cx="38%" cy="32%" r="75%"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#cbc7b8"/></radialGradient></defs>
         <circle r="47" fill="url(#cbG)"/><circle r="37.6" fill="none" stroke="#b6b2a3" stroke-dasharray="3 3"/>
         <line x1="-47" x2="47" stroke="#d2cebf"/><line y1="-47" y2="47" stroke="#d2cebf"/>
-        <circle id="spinDot" r="8" fill="#23466a" stroke="#fff" stroke-width="1.5"/>
+        <circle id="spinDot" r="8" fill="#c8202a" stroke="#fff" stroke-width="1.5"/>
       </svg>
       <div class="spininfo" id="spinTxt">Centre</div>
     </div>
-    <div class="ctlmid">
-      <div class="aim" role="group" aria-label="Fine aim">
-        <button class="btn" id="aL2" type="button" aria-label="Aim left 1 degree">« 1°</button>
-        <button class="btn" id="aL1" type="button" aria-label="Aim left a tenth of a degree">‹ .1°</button>
-        <button class="btn" id="aR1" type="button" aria-label="Aim right a tenth of a degree">.1° ›</button>
-        <button class="btn" id="aR2" type="button" aria-label="Aim right 1 degree">1° »</button>
+    <div class="fine glass" role="group" aria-label="Fine aim">
+      <div class="row">
+        <button id="aL" type="button" aria-label="Nudge aim left (hold to move faster)"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
+        <button id="aR" type="button" aria-label="Nudge aim right (hold to move faster)"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></button>
       </div>
+      <span>Fine aim</span>
     </div>
-  </footer>
-</div>
+  </div>
+</main>
 
 <div class="overlay" id="menu">
   <div class="sheet">
@@ -177,7 +214,7 @@ button,input{font:inherit}
       <div><div class="lab">Frames</div><div class="seg" id="framePick"></div></div>
       <div><div class="lab">Guides</div><div class="seg" id="guidePick"></div></div>
     </div>
- <div><div class="lab">Graphics</div><div class="seg" id="gfxPick"></div></div>
+    <div><div class="lab">Graphics <span style="text-transform:none;letter-spacing:0;font-weight:500">· Standard runs smoother on older phones</span></div><div class="seg" id="gfxPick"></div></div>
     <div class="row2"><button class="go" id="startBtn" type="button">Play</button><button class="ghostbtn" id="resumeBtn" type="button" hidden>Back to the table</button></div>
     <div class="links"><a href="../">← ScoreKer</a><a href="../practice/">Practice table</a></div>
   </div>
