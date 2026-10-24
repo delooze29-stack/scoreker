@@ -186,7 +186,10 @@ export class View {
     // cloth with the pocket drops cut out
     const clothMat = new THREE.MeshStandardMaterial({ color: 0xffffff, map: clothTex(st.cloth, [L * 6, W * 6]), roughness: .92, envMapIntensity: .1, normalMap: fibreNormal([L * 9, W * 9]), normalScale: new THREE.Vector2(0.35, 0.35) });
     clothMat.shadowSide = THREE.DoubleSide; // the bed must block the light, or ball shadows show on the floor underneath
-    const bed = new THREE.Shape(); bed.moveTo(-cw, -cw); bed.lineTo(L + cw, -cw); bed.lineTo(L + cw, W + cw); bed.lineTo(-cw, W + cw); bed.closePath();
+    // the bed runs just under the rails; holes are trimmed to it (a hole that crosses the edge of the shape breaks the triangulation and leaves cloth over the pocket)
+    const bx = cw + 0.004, bi = cw + 0.002;
+    const bed = new THREE.Shape(); bed.moveTo(-bx, -bx); bed.lineTo(L + bx, -bx); bed.lineTo(L + bx, W + bx); bed.lineTo(-bx, W + bx); bed.closePath();
+    const trim = pts => { const o = []; pts.forEach(q => { const t = { x: Math.min(L + bi, Math.max(-bi, q.x)), y: Math.min(W + bi, Math.max(-bi, q.y)) }; const l = o[o.length - 1]; if (!l || Math.hypot(l.x - t.x, l.y - t.y) > 1e-5) o.push(t); }); return o; };
     // each hole runs from the pocket mouth (the cushion points) back between the jaws and round the drop
     const holeOutline = p => {
       const c = p.drop, cx = L / 2, cy = W / 2, pts = [p.noseEntry, p.cutEntry];
@@ -198,7 +201,7 @@ export class View {
       pts.push(p.cutExit, p.noseExit);
       return pts;
     };
-    this.holeShapes = table.pockets.map(holeOutline);
+    this.holeShapes = table.pockets.map(p => trim(holeOutline(p)));
     this.holeShapes.forEach(pts => { const h = new THREE.Path(); pts.forEach((q, i) => i ? h.lineTo(q.x, q.y) : h.moveTo(q.x, q.y)); h.closePath(); bed.holes.push(h); });
     const cloth = new THREE.Mesh(new THREE.ShapeGeometry(bed, 48), clothMat); cloth.rotation.x = -Math.PI / 2; cloth.receiveShadow = true; cloth.castShadow = true; G.add(cloth);
     // soft shading along the cushions and round the drops
@@ -271,20 +274,21 @@ export class View {
     });
     table.pockets.forEach(p => {
       const c = V3(p.drop.x, 0, p.drop.y), hr = p.drop.r;
-      const fall = new THREE.Mesh(new THREE.CylinderGeometry(hr, hr * 0.74, 0.04, 40, 1, true), fallMat); fall.position.set(c.x, -0.02, c.z); G.add(fall);
+      const fall = new THREE.Mesh(new THREE.CylinderGeometry(hr - 0.0012, hr * 0.74, 0.04, 40, 1, true), linerMat); fall.position.set(c.x, -0.02, c.z); G.add(fall);
       const tube = new THREE.Mesh(new THREE.CylinderGeometry(hr * 0.74, hr * 0.68, 0.2, 32, 1, true), netMat); tube.position.set(c.x, -0.14, c.z); G.add(tube);
       const bot = new THREE.Mesh(new THREE.CircleGeometry(hr * 0.68, 32), new THREE.MeshBasicMaterial({ color: 0x030303 })); bot.rotation.x = -Math.PI / 2; bot.position.set(c.x, -0.235, c.z); G.add(bot);
-      // only the part of the rim that runs through the wooden rail (not across the mouth)
-      const N = 360, out = [];
-      for (let i = 0; i < N; i++) { const a = i / N * Math.PI * 2, x = p.drop.x + Math.cos(a) * (hr + 0.004), y = p.drop.y + Math.sin(a) * (hr + 0.004); out.push(x < -cw || x > L + cw || y < -cw || y > W + cw); }
-      let s0 = out.findIndex((o, i) => o && !out[(i + N - 1) % N]); if (s0 < 0) s0 = 0;
-      let n = 0; while (n < N && out[(s0 + n) % N]) n++;
-      const a0 = s0 / N * Math.PI * 2, span = n / N * Math.PI * 2;
-      // CylinderGeometry measures its angle from +z towards +x; physics angle a sits at (cos a, -sin a) in x,z
-      const th0 = Math.PI / 2 + a0;
-      const wall = new THREE.Mesh(new THREE.CylinderGeometry(hr, hr, rh, 48, 1, true, th0, span), linerMat); wall.position.set(c.x, rh / 2, c.z); G.add(wall);
-      const plate = new THREE.Mesh(new THREE.TorusGeometry(hr + 0.008, 0.011, 12, 48, span), plateMat);
-      plate.rotation.set(-Math.PI / 2, 0, a0); plate.scale.z = 0.4; plate.position.set(c.x, rh + 0.001, c.z); plate.castShadow = true; G.add(plate);
+      // a leather liner round the back of the hole, from jaw to jaw, the same at every pocket
+      const A = Math.atan2(p.cutEntry.y - p.drop.y, p.cutEntry.x - p.drop.x), B = Math.atan2(p.cutExit.y - p.drop.y, p.cutExit.x - p.drop.x);
+      const mid = t => (p.drop.x + Math.cos(t) * hr - p.M.x) * p.o.x + (p.drop.y + Math.sin(t) * hr - p.M.y) * p.o.y;
+      let a0 = A, span = B - A; while (span < 0) span += Math.PI * 2;      // anticlockwise from entry to exit...
+      if (mid(a0 + span / 2) < mid(B + (Math.PI * 2 - span) / 2)) { a0 = B; span = Math.PI * 2 - span; } // ...unless that's the mouth side
+      const th0 = Math.PI / 2 + a0; // CylinderGeometry measures from +z towards +x; physics angle a sits at (cos a, -sin a) in x,z
+      const wall = new THREE.Mesh(new THREE.CylinderGeometry(hr - 0.0012, hr - 0.0012, rh + 0.03, 56, 1, true, th0, span), linerMat);
+      wall.position.set(c.x, rh / 2 - 0.015, c.z); G.add(wall);
+      const plate = new THREE.Mesh(new THREE.TorusGeometry(hr + 0.004, 0.0075, 10, 56, span), plateMat);
+      plate.rotation.set(-Math.PI / 2, 0, a0); plate.scale.z = 0.45; plate.position.set(c.x, rh + 0.0005, c.z); plate.castShadow = true; G.add(plate);
+      // rounded ends where the liner meets the jaws
+      [a0, a0 + span].forEach(t => { const k = new THREE.Mesh(new THREE.SphereGeometry(0.0075, 12, 8), plateMat); k.scale.y = 0.45; k.position.copy(V3(p.drop.x + Math.cos(t) * (hr + 0.004), rh + 0.0005, p.drop.y + Math.sin(t) * (hr + 0.004))); G.add(k); });
     });
 
     if (studio) this.buildStudio(L, W, st); else this.buildArena(L, W, st);
