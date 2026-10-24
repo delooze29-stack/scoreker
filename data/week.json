@@ -1,7 +1,7 @@
 {
   "weekId": "2026-10-24",
   "createdAt": "2026-10-23T07:44:33.583Z",
-  "updatedAt": "2026-10-23T22:58:27.931Z",
+  "updatedAt": "2026-10-24T16:51:41.957Z",
   "red": {
     "id": "d0202960708a442401d7fc7bd74a0183",
     "sport": "soccer_epl",
@@ -34,8 +34,11 @@
         "draw": 4.18,
         "away": 4.3
       },
-      "status": "NS",
-      "result": null,
+      "status": "FT",
+      "result": [
+        2,
+        3
+      ],
       "colour": "yellow"
     },
     {
@@ -50,8 +53,11 @@
         "draw": 3.55,
         "away": 1.96
       },
-      "status": "NS",
-      "result": null,
+      "status": "FT",
+      "result": [
+        1,
+        1
+      ],
       "colour": "green"
     },
     {
@@ -66,8 +72,11 @@
         "draw": 3.35,
         "away": 3.01
       },
-      "status": "NS",
-      "result": null,
+      "status": "FT",
+      "result": [
+        0,
+        0
+      ],
       "colour": "brown"
     },
     {
@@ -82,8 +91,11 @@
         "draw": 3.41,
         "away": 2.34
       },
-      "status": "NS",
-      "result": null,
+      "status": "FT",
+      "result": [
+        4,
+        1
+      ],
       "colour": "blue"
     },
     {
@@ -98,8 +110,11 @@
         "draw": 3.37,
         "away": 2.85
       },
-      "status": "NS",
-      "result": null,
+      "status": "FT",
+      "result": [
+        5,
+        0
+      ],
       "colour": "pink"
     },
     {
@@ -114,8 +129,11 @@
         "draw": 3.24,
         "away": 2.62
       },
-      "status": "NS",
-      "result": null,
+      "status": "FT",
+      "result": [
+        2,
+        0
+      ],
       "colour": "black"
     }
   ],
@@ -132,8 +150,11 @@
         "draw": 4.46,
         "away": 7.56
       },
-      "status": "NS",
-      "result": null,
+      "status": "FT",
+      "result": [
+        2,
+        0
+      ],
       "colour": "yellow"
     },
     {
@@ -148,8 +169,11 @@
         "draw": 4.3,
         "away": 1.62
       },
-      "status": "NS",
-      "result": null,
+      "status": "FT",
+      "result": [
+        2,
+        1
+      ],
       "colour": "green"
     },
     {
@@ -196,8 +220,11 @@
         "draw": 3.44,
         "away": 2.24
       },
-      "status": "NS",
-      "result": null,
+      "status": "FT",
+      "result": [
+        0,
+        1
+      ],
       "colour": "pink"
     },
     {
