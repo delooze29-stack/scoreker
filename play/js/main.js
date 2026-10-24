@@ -8,17 +8,17 @@ const $ = id => document.getElementById(id);
 const D2R = Math.PI / 180;
 
 const STYLES = {
-  snooker: { crowd: true, cloth: 0x1a6a33, wood: 0x4b2412, railWidth: 0.12, railRough: .4, plate: 0x2a170c, plateRough: .5, plateMetal: .05, diamonds: false },
-  uk:      { crowd: false, cloth: 0x1d6e3c, wood: 0x3a2213, railWidth: 0.09, railRough: .42, plate: 0x0d0d0d, plateRough: .35, plateMetal: .15, diamonds: false },
-  us:      { crowd: true, cloth: 0x1673b8, wood: 0x0b0a09, railWidth: 0.11, railRough: .3, plate: 0x0b0b0b, plateRough: .4, plateMetal: .1, diamonds: true },
+  snooker: { env: "studio", crowd: false, cloth: 0x119a25, wood: 0x6a3416, railWidth: 0.12, railRough: .32, plate: 0x2a170c, plateRough: .5, plateMetal: .05, diamonds: false },
+  uk:      { env: "pub", crowd: false, cloth: 0x1d6e3c, wood: 0x3a2213, railWidth: 0.09, railRough: .42, plate: 0x0d0d0d, plateRough: .35, plateMetal: .15, diamonds: false },
+  us:      { env: "arena", crowd: true, cloth: 0x1673b8, wood: 0x0b0a09, railWidth: 0.11, railRough: .3, plate: 0x0b0b0b, plateRough: .4, plateMetal: .1, diamonds: true },
 };
 const GAMES = [
-  { id: "snooker", name: "Snooker", note: "12ft table, 15 reds", cloth: "#1a6a33", wood: "#4b2412", balls: ["#b3121c", "#b3121c", "#f08cb4", "#111"] },
+  { id: "snooker", name: "Snooker", note: "12ft table, 15 reds", cloth: "#27a83a", wood: "#6a3416", balls: ["#b3121c", "#b3121c", "#f08cb4", "#111"] },
   { id: "uk", name: "UK 8-ball", note: "7ft pub table, reds & yellows", cloth: "#1d6e3c", wood: "#2c1a10", balls: ["#c8141c", "#f2c200", "#111", "#c8141c"] },
   { id: "us", name: "US 8-ball", note: "8ft table, spots & stripes", cloth: "#1673b8", wood: "#161412", balls: ["#f2b705", "#1d3fae", "#d0261d", "#111"] },
 ];
 
-const cfg = { game: "snooker", opp: "medium", bestOf: 1, guides: "full", sound: true };
+const cfg = { game: "snooker", opp: "medium", bestOf: 1, guides: "full", sound: true, quality: "high" };
 let T, S, W, view, mode = "menu", aim = 0, pitch = 0, spin = { x: 0, y: 0 }, viewMode = "aim";
 let cpu = null, follow = null, place = null, lastEvent = 0, frameFirst = 0, match = null, between = 0;
 
@@ -62,6 +62,7 @@ function buildMenu() {
   seg("oppPick", [["easy", "Easy"], ["medium", "Medium"], ["hard", "Hard"], ["pro", "Pro"], ["friend", "Friend"]], "opp");
   seg("framePick", [[1, "1"], [3, "3"], [5, "5"]], "bestOf");
   seg("guidePick", [["full", "Full"], ["short", "Short"], ["off", "Off"]], "guides");
+  seg("gfxPick", [["high", "High (glow, HDR)"], ["standard", "Standard (smoother on older phones)"]], "quality", () => view && view.setQuality(cfg.quality));
 }
 $("startBtn").onclick = () => { Snd.init(); startMatch(); };
 $("resumeBtn").onclick = () => { $("menu").hidden = true; };
@@ -161,27 +162,51 @@ function startAim() {
     const legal = Rules.legalFirst(S).map(id => W.ball(id)).sort((a, b) => Math.hypot(a.x - c.x, a.y - c.y) - Math.hypot(b.x - c.x, b.y - c.y));
     if (legal[0]) aim = Math.atan2(legal[0].y - c.y, legal[0].x - c.x);
   }
-  if (S.isBreak && S.game !== "snooker") $("pw").value = 85; else if (S.isBreak) $("pw").value = 55;
-  powerOut();
   camSnap();
-  hint(viewMode === "aim" ? "Drag ← → to aim · ↑ ↓ to raise the view" : "Tap or drag to point the cue");
+  hint(viewMode === "aim" ? "Drag ← → to aim · ↑ ↓ view · pull the cue on the right to strike" : "Tap or drag to point the cue · pull the cue on the right to strike");
 }
 let userTop = false, humanPitch = 0.18;
 function camSnap() { viewState.snap = true; $("viewBtn").textContent = viewMode === "top" ? "Behind ball" : "Overhead"; }
 
 // ---------------------------------------------------------------- shooting
-function power() { return +$("pw").value / 100; }
-function powerOut() { $("pwOut").textContent = $("pw").value + "%"; }
-$("pw").oninput = powerOut;
-function shoot() {
+// Power comes from pulling the cue back: the further, the harder (with finer control at the soft end).
+let lastPower = 0.4, pullP = 0;
+const speedFor = p => T.spec.vmax * (0.025 + 0.975 * Math.pow(p, 1.45));
+function shoot(p = lastPower) {
   if (mode !== "aim") return;
-  Snd.init();
-  startStroke({ angle: aim, speed: Math.max(0.05, power()) * T.spec.vmax, sx: spin.x, sy: spin.y });
+  Snd.init(); lastPower = p;
+  startStroke({ angle: aim, speed: speedFor(p), sx: spin.x, sy: spin.y }, pullGap(p));
 }
-function startStroke(d) {
-  mode = "stroke"; cpu = cpu || {}; cpu.stroke = { d, t: 0 };
+const pullGap = p => T.R * 1.4 + p * T.R * 10;
+function startStroke(d, pulled) {
+  mode = "stroke"; cpu = cpu || {}; cpu.stroke = { d, t: pulled ? 0.5 : 0, from: pulled || T.R * 7.4, fast: !!pulled };
   hint("");
 }
+// the pull strip
+const pullEl = $("pull"), pcue = $("pcue"), pfill = $("pfill"), pval = $("pval");
+let pulling = null;
+function showPull(p) {
+  const h = pullEl.querySelector(".ptrack").clientHeight * 0.8;
+  pcue.style.transform = `translate(-50%, ${p * h}px)`; pfill.style.height = `${p * 100}%`;
+  pval.textContent = p > 0.005 ? `${Math.round(p * 100)}%` : "Pull";
+  pullEl.setAttribute("aria-valuenow", Math.round(p * 100));
+}
+pullEl.addEventListener("pointerdown", e => {
+  e.stopPropagation(); if (mode !== "aim") return;
+  Snd.init(); pulling = { y: e.clientY }; pullP = 0;
+  try { pullEl.setPointerCapture(e.pointerId); } catch (_) {}
+});
+pullEl.addEventListener("pointermove", e => {
+  if (!pulling || mode !== "aim") return;
+  const h = pullEl.querySelector(".ptrack").clientHeight * 0.8;
+  pullP = Math.max(0, Math.min(1, (e.clientY - pulling.y) / h)); showPull(pullP);
+});
+const release = () => {
+  if (!pulling) return; pulling = null;
+  const p = pullP; pullP = 0; showPull(0);
+  if (p > 0.02 && mode === "aim") shoot(p);
+};
+pullEl.addEventListener("pointerup", release); pullEl.addEventListener("pointercancel", () => { pulling = null; pullP = 0; showPull(0); });
 function strike(d) {
   W.strike(0, d.angle, d.speed, d.sx, d.sy);
   Snd.hit(d.speed, "cue");
@@ -205,7 +230,7 @@ function endShot() {
 const stage = $("stage");
 let drag = null;
 stage.addEventListener("pointerdown", e => {
-  if (e.target.closest("button")) return;
+  if (e.target.closest("button") || e.target.closest("#pull")) return;
   Snd.init();
   drag = { x: e.clientX, y: e.clientY, aim, pitch, axis: null };
   try { stage.setPointerCapture(e.pointerId); } catch (_) {}
@@ -243,7 +268,6 @@ $("placeDone").onclick = () => {
   W.setBalls(S.balls); view.resetBalls(S.balls);
   startAim();
 };
-$("shoot").onclick = shoot;
 $("viewBtn").onclick = () => {
   if (mode === "place") return;
   viewMode = viewMode === "top" ? "aim" : "top"; userTop = viewMode === "top"; camSnap();
@@ -259,7 +283,9 @@ window.addEventListener("keydown", e => {
   if (mode !== "aim") return;
   if (e.key === "ArrowLeft") { aim += (e.shiftKey ? 1 : 0.1) * D2R; e.preventDefault(); }
   if (e.key === "ArrowRight") { aim -= (e.shiftKey ? 1 : 0.1) * D2R; e.preventDefault(); }
-  if (e.key === " ") { shoot(); e.preventDefault(); }
+  if (e.key === " ") { shoot(lastPower); e.preventDefault(); }
+  if (e.key === "ArrowUp") { lastPower = Math.min(1, lastPower + 0.05); toast(`Power ${Math.round(lastPower * 100)}% (Space to strike)`); e.preventDefault(); }
+  if (e.key === "ArrowDown") { lastPower = Math.max(0.02, lastPower - 0.05); toast(`Power ${Math.round(lastPower * 100)}% (Space to strike)`); e.preventDefault(); }
 });
 
 // spin pad
@@ -312,7 +338,7 @@ function hud() {
   const me = S.players[S.turn];
   $("turnChip").textContent = S.over ? "" : me.type === "human" ? (S.players[1].type === "human" ? `${me.name} to play` : "Your shot") : `${me.name}`;
   $("turnChip").classList.toggle("me", me.type === "human");
-  $("shoot").disabled = mode !== "aim";
+  pullEl.classList.toggle("off", mode !== "aim");
 }
 
 // ---------------------------------------------------------------- overlap inset
@@ -379,7 +405,7 @@ function frame(now) {
       if (cpu.t > 1.5) startStroke(cpu.d);
     } else if (mode === "stroke") {
       const st = cpu.stroke; st.t += dt;
-      if (st.t > 0.62) strike(st.d);
+      if (st.t > (st.fast ? 0.5 + 0.06 + 0.05 * (1 - st.from / (T.R * 11.4)) : 0.62)) strike(st.d);
     } else if (mode === "run") {
       W.advance(dt);
       for (; lastEvent < W.events.length; lastEvent++) {
@@ -392,6 +418,9 @@ function frame(now) {
       if (firstHit) { const ob = W.ball(firstHit.a === 0 ? firstHit.b : firstHit.a); if (ob.on || ob.pocket >= 0) tb = ob; }
       const tp = tb.on ? tb : (tb.pocket >= 0 ? T.pockets[tb.pocket].drop : tb);
       follow.track = { x: tp.x, y: tp.y };
+      follow.t = (follow.t || 0) + dt;
+      if (firstHit && follow.hitT == null) follow.hitT = follow.t;
+      if (!follow.high && follow.t > (follow.hitT != null ? follow.hitT + 0.45 : 1.3)) follow.high = true;
       if (!W.moving() && !view.potAnimating()) endShot();
     } else if (mode === "between") {
       between -= dt; if (between <= 0) nextTurn();
@@ -399,21 +428,23 @@ function frame(now) {
     // cue + guides
     const showCue = (mode === "aim" || mode === "cpuaim" || mode === "stroke") && c.on;
     let gap = T.R * 1.4;
-    if (mode === "stroke") { const t = cpu.stroke.t; gap = t < 0.5 ? T.R * 1.4 + Math.sin(t / 0.5 * Math.PI / 2) * T.R * 6 : Math.max(0, T.R * 7.4 * (1 - (t - 0.5) / 0.12)); }
+    if (mode === "aim" && pulling) gap = pullGap(pullP);
+    if (mode === "stroke") { const st = cpu.stroke, t = st.t; const fwd = st.fast ? 0.06 + 0.05 * (1 - st.from / (T.R * 11.4)) : 0.12; gap = t < 0.5 ? T.R * 1.4 + Math.sin(t / 0.5 * Math.PI / 2) * T.R * 6 : Math.max(0, st.from * (1 - (t - 0.5) / fwd)); }
     const sp = mode === "cpuaim" || (mode === "stroke" && cpu.stroke.d !== undefined && S.players[S.turn].type === "cpu") ? { x: cpu.d ? cpu.d.sx : 0, y: cpu.d ? cpu.d.sy : 0 } : spin;
     view.setCue(showCue, c, mode === "stroke" ? cpu.stroke.d.angle : aim, sp, gap);
     const hit = mode === "aim" ? guides() : (view.setGuides(null), null);
     $("inset").hidden = mode !== "aim" || !c.on || viewMode === "top";
     if (!$("inset").hidden) drawOverlap(hit);
     // camera
-    viewState.mode = mode === "place" ? "top" : mode === "run" ? (viewMode === "top" ? "top" : "follow") : viewMode;
+    const cpuTurn = S.players[S.turn].type === "cpu" && mode !== "between";
+    viewState.mode = mode === "place" ? "top" : viewMode === "top" ? "top" : cpuTurn && (mode === "think" || mode === "cpuaim" || mode === "stroke" || mode === "run") ? "tv" : mode === "run" ? (follow.high ? "tv" : "follow") : viewMode;
     viewState.pitch = pitch; viewState.angle = mode === "run" ? follow.angle : (mode === "stroke" ? cpu.stroke.d.angle : aim);
     viewState.cue = mode === "run" ? { x: follow.eye.x + Math.cos(follow.angle) * (0.34 + pitch * 1.1), y: follow.eye.y + Math.sin(follow.angle) * (0.34 + pitch * 1.1) } : { x: c.x, y: c.y };
     viewState.track = follow && follow.track; viewState.eye = follow && follow.eye;
     view.sync(W, dt);
     view.updateCamera(viewState, dt);
     view.render();
-    $("shoot").disabled = mode !== "aim";
+    pullEl.classList.toggle("off", mode !== "aim");
   }
   requestAnimationFrame(frame);
 }
@@ -422,7 +453,7 @@ function frame(now) {
 buildMenu();
 hint("");
 try {
-  view = new View(stage);
+  view = new View(stage); view.setQuality(cfg.quality);
   // show a table behind the menu
   T = buildTable(cfg.game); view.build(T, cfg.game, STYLES[cfg.game]);
   S = Rules.createGame(cfg.game, players()); W = new World(T); W.setBalls(S.balls); view.resetBalls(S.balls);
@@ -431,4 +462,4 @@ try {
 } catch (e) { console.error(e); $("menu").querySelector("p").textContent = "Your browser couldn't start the 3D table."; }
 hud();
 requestAnimationFrame(frame);
-window.__game = { get S() { return S; }, get W() { return W; }, get mode() { return mode; }, set aim(a) { aim = a; }, get aim() { return aim; }, set pitch(p) { pitch = p; }, shoot, cfg, endFrame: () => { S.over = { winner: 0, text: 'Test frame over.' }; nextTurn(); }, renderInfo: () => view.renderer.info.render };
+window.__game = { pull: p => shoot(p), get S() { return S; }, get W() { return W; }, get mode() { return mode; }, set aim(a) { aim = a; }, get aim() { return aim; }, set pitch(p) { pitch = p; }, shoot, cfg, endFrame: () => { S.over = { winner: 0, text: 'Test frame over.' }; nextTurn(); }, renderInfo: () => view.renderer.info.render };
