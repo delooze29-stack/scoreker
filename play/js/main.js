@@ -199,7 +199,7 @@ function startAim() {
     if (legal[0]) aim = Math.atan2(legal[0].y - c.y, legal[0].x - c.x);
   }
   camSnap();
-  hint(viewMode === "aim" ? "Drag left or right to aim, up or down to raise the view. Pull the cue on the right down, then let go to strike." : "Tap or drag to point the cue. Pull the cue on the right down, then let go to strike.");
+  hint(viewMode === "aim" ? "Drag left or right to aim, up or down to raise the view, pinch to zoom. Pull the cue on the right down, then let go to strike." : "Tap or drag to point the cue. Pull the cue on the right down, then let go to strike.");
 }
 let userTop = false, humanPitch = 0.18;
 function camSnap() { viewState.snap = true; const b = $("viewBtn"); b.setAttribute("aria-pressed", viewMode === "top"); b.setAttribute("aria-label", viewMode === "top" ? "Behind the ball view" : "Overhead view"); }
@@ -251,7 +251,8 @@ function strike(d) {
   Snd.hit(d.speed, "cue");
   lastEvent = 0; mode = "run";
   const c = cueBall();
-  follow = { eye: { x: c.x - Math.cos(d.angle) * (0.34 + pitch * 1.1), y: c.y - Math.sin(d.angle) * (0.34 + pitch * 1.1) }, track: { x: c.x, y: c.y }, angle: d.angle };
+  const bk = (0.34 + pitch * 1.1) * zoom.aim;
+  follow = { eye: { x: c.x - Math.cos(d.angle) * bk, y: c.y - Math.sin(d.angle) * bk }, track: { x: c.x, y: c.y }, angle: d.angle };
 }
 function endShot() {
   const sum = summarise(W.events);
@@ -267,26 +268,48 @@ function endShot() {
 
 // ---------------------------------------------------------------- input
 const stage = $("stage");
-let drag = null;
+let drag = null, pinch = null;
+const touches = new Map();
+// zoom per camera: below 1 is closer, above 1 further away (pinch, or the mouse wheel)
+const zoom = { aim: 1, top: 1, tv: 1 };
+const zoomKey = () => viewState.mode === "top" ? "top" : viewState.mode === "tv" ? "tv" : "aim";
+const zoomLimits = { aim: [0.55, 2.6], top: [0.45, 1], tv: [0.55, 1.6] };
+function setZoom(k, z) { const [a, b] = zoomLimits[k]; zoom[k] = Math.max(a, Math.min(b, z)); }
 stage.addEventListener("pointerdown", e => {
-  if (e.target.closest("button") || e.target.closest("#pull")) return;
+  if (e.target.closest("button") || e.target.closest("#pull") || e.target.closest(".spinbig") || e.target.closest(".ctl")) return;
   Snd.init();
-  drag = { x: e.clientX, y: e.clientY, aim, pitch, axis: null };
+  touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
   try { stage.setPointerCapture(e.pointerId); } catch (_) {}
+  if (touches.size === 2) { // second finger: pinch to zoom, and leave the aim where it was
+    const [a, b] = [...touches.values()], k = zoomKey();
+    if (drag) { aim = drag.aim; pitch = drag.pitch; }
+    pinch = { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, z: zoom[k], k }; drag = null; return;
+  }
+  if (touches.size > 2) return;
+  drag = { x: e.clientX, y: e.clientY, aim, pitch, axis: null };
   if (mode === "place") movePlace(e);
   else if (mode === "aim" && viewMode === "top") pointAim(e);
 });
+stage.addEventListener("wheel", e => { e.preventDefault(); const k = zoomKey(); setZoom(k, zoom[k] * Math.exp(e.deltaY * 0.0012)); }, { passive: false });
 stage.addEventListener("pointermove", e => {
+  if (touches.has(e.pointerId)) touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pinch) {
+    if (touches.size < 2) return;
+    const [a, b] = [...touches.values()], d = Math.hypot(a.x - b.x, a.y - b.y) || 1;
+    setZoom(pinch.k, pinch.z * pinch.d / d); // fingers apart = closer, together = further away
+    return;
+  }
   if (!drag) return;
   if (mode === "place") { movePlace(e); return; }
   if (mode !== "aim") return;
   if (viewMode === "top") { pointAim(e); return; }
   const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
   if (!drag.axis && Math.hypot(dx, dy) > 6) drag.axis = Math.abs(dx) >= Math.abs(dy) ? "x" : "y";
-  if (drag.axis === "x") aim = drag.aim - dx * 0.0032 * (1 - pitch * 0.4);
+  // about 0.07° per pixel: a long, slow drag for fine adjustments
+  if (drag.axis === "x") aim = drag.aim - dx * 0.0012 * (1 - pitch * 0.3) * Math.min(1.4, Math.max(0.6, zoom.aim));
   if (drag.axis === "y") humanPitch = pitch = Math.max(0, Math.min(1, drag.pitch - dy * 0.004));
 });
-const up = () => { drag = null; };
+const up = e => { touches.delete(e.pointerId); if (touches.size < 2) pinch = null; if (!touches.size) drag = null; };
 stage.addEventListener("pointerup", up); stage.addEventListener("pointercancel", up);
 function movePlace(e) {
   const p = view.pick(e.clientX, e.clientY); if (!p) return;
@@ -497,6 +520,7 @@ function frame(now) {
     viewState.pitch = pitch; viewState.angle = mode === "run" ? follow.angle : (mode === "stroke" ? cpu.stroke.d.angle : aim);
     viewState.cue = mode === "run" ? { x: follow.eye.x + Math.cos(follow.angle) * (0.34 + pitch * 1.1), y: follow.eye.y + Math.sin(follow.angle) * (0.34 + pitch * 1.1) } : { x: c.x, y: c.y };
     viewState.track = follow && follow.track; viewState.eye = follow && follow.eye;
+    viewState.zoom = zoom[viewState.mode === "top" ? "top" : viewState.mode === "tv" ? "tv" : "aim"];
     view.sync(W, dt);
     view.updateCamera(viewState, dt);
     view.render();
@@ -518,4 +542,4 @@ try {
 } catch (e) { console.error(e); $("menu").querySelector("p").textContent = "Your browser couldn't start the 3D table."; }
 hud();
 requestAnimationFrame(frame);
-window.__game = { pull: p => shoot(p), get S() { return S; }, get W() { return W; }, get mode() { return mode; }, set aim(a) { aim = a; }, get aim() { return aim; }, set pitch(p) { pitch = p; }, shoot, cfg, endFrame: () => { S.over = { winner: 0, text: 'Test frame over.' }; nextTurn(); }, renderInfo: () => view.renderer.info.render };
+window.__game = { zoom, pull: p => shoot(p), get S() { return S; }, get W() { return W; }, get mode() { return mode; }, set aim(a) { aim = a; }, get aim() { return aim; }, set pitch(p) { pitch = p; }, shoot, cfg, endFrame: () => { S.over = { winner: 0, text: 'Test frame over.' }; nextTurn(); }, renderInfo: () => view.renderer.info.render };

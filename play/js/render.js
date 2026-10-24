@@ -481,9 +481,24 @@ export class View {
     const R = this.table.R, ux = Math.cos(angle), uy = Math.sin(angle), rx = uy, ry = -ux;
     const depth = R * Math.sqrt(Math.max(0, 1 - (spin.x * spin.x + spin.y * spin.y) * 0.25));
     const tx = cue.x - ux * (depth + gap) + rx * spin.x * R * 0.5, ty = cue.y - uy * (depth + gap) + ry * spin.x * R * 0.5;
-    this.cue.position.copy(V3(tx, R + spin.y * R * 0.5, ty));
+    const tipH = R + spin.y * R * 0.5;
+    this.cue.position.copy(V3(tx, tipH, ty));
     this.cue.rotation.set(0, Math.atan2(-ux, uy), 0);
-    this.cueInner.rotation.x = -Math.PI / 2 - 0.07;
+    // How far back along the cue until it crosses the cushion and then the rail? Raise the butt to clear both.
+    // measured from the back of the cue ball, where the tip strikes
+    const { L, W, cw } = this.table, bx = -ux, by = -uy, sx0 = cue.x - ux * R, sy0 = cue.y - uy * R;
+    const exitAt = m => { // distance to the box [-m, L+m] x [-m, W+m]
+      const tx1 = bx > 0 ? (L + m - sx0) / bx : bx < 0 ? (-m - sx0) / bx : Infinity;
+      const ty1 = by > 0 ? (W + m - sy0) / by : by < 0 ? (-m - sy0) / by : Infinity;
+      return Math.max(0.004, Math.min(tx1, ty1));
+    };
+    const need = (d, hgt) => Math.atan2(Math.max(0, hgt - tipH), d);
+    let elev = 0.07;
+    elev = Math.max(elev, need(exitAt(0), R * 1.4 + 0.008));   // over the cushion
+    elev = Math.max(elev, need(exitAt(cw), this.rh + 0.012));  // over the wooden rail
+    elev = Math.min(elev, 0.6);
+    this.cueElev = this.cueElev == null ? elev : this.cueElev + (elev - this.cueElev) * 0.35;
+    this.cueInner.rotation.x = -Math.PI / 2 - this.cueElev;
   }
   setGuides(g) {
     const G = this.guide, h = 0.004;
@@ -539,18 +554,23 @@ export class View {
     this.canopy.forEach(m => m.visible = v.mode !== "top" && v.mode !== "tv" && v.mode !== "follow" && (v.pitch || 0) < 0.35);
     if (v.mode === "tv") { // high broadcast view from behind the baulk end
       const portrait = w < h; this.camera.fov = portrait ? 50 : 44; this.camera.clearViewOffset();
-      const back = portrait ? 0.9 + L * 0.42 : 0.8 + L * 0.36, hgt = portrait ? 1.2 + L * 0.42 : 1.25 + L * 0.42;
+      const z = v.zoom || 1, back = (portrait ? 0.9 + L * 0.42 : 0.8 + L * 0.36) * z, hgt = (portrait ? 1.2 + L * 0.42 : 1.25 + L * 0.42) * z;
       this.camTo(V3(-back, hgt, W / 2), V3(L * (portrait ? 0.58 : 0.5), 0, W / 2), new THREE.Vector3(0, 1, 0), 3, dt, snap);
     } else if (v.mode === "top") {
       this.camera.fov = 40; this.camera.clearViewOffset();
       const aspect = w / h, vert = aspect < 1, tv = Math.tan(20 * Math.PI / 180);
       const l = L + 0.45, wd = W + 0.45, longS = vert ? l : wd, shortS = vert ? wd : l;
-      const H = Math.max(longS / 2 / tv, shortS / 2 / (tv * aspect));
-      this.camTo(V3(L / 2, H, W / 2), V3(L / 2, 0, W / 2), vert ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 0, -1), 6, dt, snap);
+      const z = Math.min(1, v.zoom || 1), H = Math.max(longS / 2 / tv, shortS / 2 / (tv * aspect)) * z;
+      // zoomed in, drift towards the cue ball so it stays in view
+      const fx = L / 2 + (v.cue.x - L / 2) * (1 - z) * 1.6, fy = W / 2 + (v.cue.y - W / 2) * (1 - z) * 1.6;
+      const cx = Math.max(L * z / 2, Math.min(L - L * z / 2, fx)), cy = Math.max(W * z / 2 - 0.1, Math.min(W - W * z / 2 + 0.1, fy));
+      this.camTo(V3(cx, H, cy), V3(cx, 0, cy), vert ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 0, -1), 6, dt, snap);
     } else {
       this.camera.fov = w < h ? 46 : 40;
       const p = v.pitch, ux = Math.cos(v.angle), uy = Math.sin(v.angle);
-      const back = 0.34 + p * 1.1, high = 0.12 + p * 1.15, ahead = 1.05 - p * 0.55;
+      const z = v.zoom || 1, back = (0.34 + p * 1.1) * z, ahead = 1.05 - p * 0.55;
+      let high = (0.12 + p * 1.15) * z;
+      if (v.mode !== "follow" && this.cue.visible && this.cueElev > 0.09) high = Math.max(high, R + (back + 0.05) * Math.tan(this.cueElev) + 0.07);
       let eye = { x: v.cue.x - ux * back, y: v.cue.y - uy * back }, look = { x: v.cue.x + ux * ahead, y: v.cue.y + uy * ahead };
       if (v.mode === "follow" && v.track) { look = { x: v.track.x, y: v.track.y }; eye = v.eye || eye; }
       this.camTo(V3(eye.x, high, eye.y), V3(look.x, 0, look.y), new THREE.Vector3(0, 1, 0), v.mode === "follow" ? 4 : 18, dt, snap);
