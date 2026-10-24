@@ -216,6 +216,7 @@ function shoot(p = lastPower) {
 }
 const pullGap = p => T.R * 1.4 + p * T.R * 10;
 function startStroke(d, pulled) {
+  closeSpin();
   mode = "stroke"; cpu = cpu || {}; cpu.stroke = { d, t: pulled ? 0.5 : 0, from: pulled || T.R * 7.4, fast: !!pulled };
   hint("");
 }
@@ -326,21 +327,32 @@ window.addEventListener("keydown", e => {
   if (e.key === "ArrowDown") { lastPower = Math.max(0.02, lastPower - 0.05); toast(`Power ${Math.round(lastPower * 100)}% (Space to strike)`); e.preventDefault(); }
 });
 
-// spin pad
-const pad = $("spinPad"), dot = $("spinDot");
+// spin: tap the small cue ball to open a big one, set the tip position, then close it
+const pad = $("spinPad"), dot = $("spinDot"), big = $("spinBig"), bigPad = $("spinBigPad"), bigDot = $("spinBigDot");
+function spinLabel(x, y) {
+  const v = y > 0.15 ? "Top" : y < -0.15 ? "Screw" : "", h = x > 0.15 ? "right" : x < -0.15 ? "left" : "";
+  return !v && !h ? "Centre" : v && h ? `${v} + ${h}` : v || (h === "right" ? "Right side" : "Left side");
+}
 function setSpin(x, y) {
   const l = Math.hypot(x, y), m = 0.85; if (l > m) { x *= m / l; y *= m / l; }
-  if (Math.hypot(x, y) < 0.08) { x = 0; y = 0; }
-  spin = { x, y }; dot.setAttribute("cx", (x * 47).toFixed(1)); dot.setAttribute("cy", (-y * 47).toFixed(1));
-  const v = y > 0.15 ? "Top" : y < -0.15 ? "Screw" : "", h = x > 0.15 ? "right" : x < -0.15 ? "left" : "";
-  $("spinTxt").textContent = !v && !h ? "Centre" : v && h ? `${v} + ${h}` : v || (h === "right" ? "Right side" : "Left side");
+  if (Math.hypot(x, y) < 0.06) { x = 0; y = 0; }
+  spin = { x, y };
+  for (const d of [dot, bigDot]) { d.setAttribute("cx", (x * 47).toFixed(1)); d.setAttribute("cy", (-y * 47).toFixed(1)); }
+  $("spinTxt").textContent = spinLabel(x, y);
+  const amt = Math.round(Math.hypot(x, y) / 0.85 * 100);
+  $("spinBigTxt").textContent = spinLabel(x, y) + (amt ? ` · ${amt}%` : "");
 }
-let padDrag = false;
-const padAt = e => { if (mode !== "aim") return; const r = pad.getBoundingClientRect(); setSpin(((e.clientX - r.left) / r.width) * 2 - 1, -(((e.clientY - r.top) / r.height) * 2 - 1)); };
-pad.addEventListener("pointerdown", e => { padDrag = true; try { pad.setPointerCapture(e.pointerId); } catch (_) {} padAt(e); });
-pad.addEventListener("pointermove", e => { if (padDrag) padAt(e); });
-["pointerup", "pointercancel"].forEach(ev => pad.addEventListener(ev, () => padDrag = false));
-pad.addEventListener("dblclick", () => setSpin(0, 0));
+function openSpin() { if (mode !== "aim") return; big.hidden = false; }
+function closeSpin() { big.hidden = true; }
+pad.addEventListener("pointerdown", e => { e.stopPropagation(); openSpin(); });
+let bigDrag = false;
+const bigAt = e => { const r = bigPad.getBoundingClientRect(); setSpin(((e.clientX - r.left) / r.width) * 2 - 1, -(((e.clientY - r.top) / r.height) * 2 - 1)); };
+bigPad.addEventListener("pointerdown", e => { e.stopPropagation(); bigDrag = true; try { bigPad.setPointerCapture(e.pointerId); } catch (_) {} bigAt(e); });
+bigPad.addEventListener("pointermove", e => { if (bigDrag) bigAt(e); });
+["pointerup", "pointercancel"].forEach(ev => bigPad.addEventListener(ev, () => bigDrag = false));
+$("spinReset").onclick = () => setSpin(0, 0);
+$("spinDone").onclick = closeSpin;
+big.addEventListener("pointerdown", e => { if (e.target === big) closeSpin(); });
 
 // ---------------------------------------------------------------- HUD + messages
 let toastTimer = 0, toastT = null;
