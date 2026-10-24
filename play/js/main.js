@@ -205,6 +205,24 @@ let userTop = false, humanPitch = 0.18;
 function camSnap() { viewState.snap = true; const b = $("viewBtn"); b.setAttribute("aria-pressed", viewMode === "top"); b.setAttribute("aria-label", viewMode === "top" ? "Behind the ball view" : "Overhead view"); }
 
 // ---------------------------------------------------------------- shooting
+// Near a cushion the cue has to pass over it: keep the cue as level as possible (at most ~15°)
+// and, if that isn't enough, only the top of the cue ball can be hit.
+const EMAX = 0.26;
+function cueLimits(c, angle, sy) {
+  const R = T.R, ux = Math.cos(angle), uy = Math.sin(angle), bx = -ux, by = -uy, sx0 = c.x - ux * R, sy0 = c.y - uy * R;
+  const exitAt = m => {
+    const a = bx > 0 ? (T.L + m - sx0) / bx : bx < 0 ? (-m - sx0) / bx : Infinity;
+    const b = by > 0 ? (T.W + m - sy0) / by : by < 0 ? (-m - sy0) / by : Infinity;
+    return Math.max(0.002, Math.min(a, b));
+  };
+  const dC = exitAt(0), dR = exitAt(T.cw), Hc = R * 1.4 + 0.007, Hr = (view.rh || R * 1.4) + 0.01;
+  const hMin = Math.max(Hc - dC * Math.tan(EMAX), Hr - dR * Math.tan(EMAX));
+  const minY = Math.min(0.85, (hMin - R) / (0.5 * R));
+  const y = Math.max(sy, minY), tipH = R + y * 0.5 * R;
+  const elev = Math.max(0.05, Math.atan2(Math.max(0, Hc - tipH), dC), Math.atan2(Math.max(0, Hr - tipH), dR));
+  return { minY: minY > -0.99 ? minY : null, y, elev: Math.min(elev, 0.5) };
+}
+
 // Power comes from pulling the cue back: the further, the harder (with finer control at the soft end).
 let lastPower = 0.4, pullP = 0;
 const speedFor = p => T.spec.vmax * (0.025 + 0.975 * Math.pow(p, 1.45));
@@ -212,7 +230,8 @@ function shoot(p = lastPower) {
   if (mode !== "aim") return;
   Snd.init(); lastPower = p;
   const boost = S.isBreak && S.game !== "snooker" ? 1.12 : 1; // a full-blooded break
-  startStroke({ angle: aim, speed: speedFor(p) * boost, sx: spin.x, sy: spin.y }, pullGap(p));
+  const lim = cueLimits(cueBall(), aim, spin.y);
+  startStroke({ angle: aim, speed: speedFor(p) * boost, sx: spin.x, sy: lim.y }, pullGap(p));
 }
 const pullGap = p => T.R * 1.4 + p * T.R * 10;
 function startStroke(d, pulled) {
@@ -247,6 +266,7 @@ const release = () => {
 };
 pullEl.addEventListener("pointerup", release); pullEl.addEventListener("pointercancel", () => { pulling = null; pullP = 0; showPull(0); });
 function strike(d) {
+  d = { ...d, sy: cueLimits(cueBall(), d.angle, d.sy).y };
   W.strike(0, d.angle, d.speed, d.sx, d.sy);
   Snd.hit(d.speed, "cue");
   lastEvent = 0; mode = "run";
@@ -357,6 +377,7 @@ function spinLabel(x, y) {
   return !v && !h ? "Centre" : v && h ? `${v} + ${h}` : v || (h === "right" ? "Right side" : "Left side");
 }
 function setSpin(x, y) {
+  limShown = null;
   const l = Math.hypot(x, y), m = 0.85; if (l > m) { x *= m / l; y *= m / l; }
   if (Math.hypot(x, y) < 0.06) { x = 0; y = 0; }
   spin = { x, y };
@@ -364,6 +385,17 @@ function setSpin(x, y) {
   $("spinTxt").textContent = spinLabel(x, y);
   const amt = Math.round(Math.hypot(x, y) / 0.85 * 100);
   $("spinBigTxt").textContent = spinLabel(x, y) + (amt ? ` · ${amt}%` : "");
+}
+let limShown = null;
+function showCushionLimit(lim) {
+  const forced = lim && lim.minY !== null && lim.minY > spin.y + 0.02;
+  const key = forced ? lim.minY.toFixed(2) : "";
+  if (key === limShown) return; limShown = key;
+  const y = forced ? lim.y : spin.y;
+  for (const d of [dot, bigDot]) d.setAttribute("cy", (-y * 47).toFixed(1));
+  $("spinTxt").textContent = forced ? "Top only (cushion)" : spinLabel(spin.x, spin.y);
+  const band = $("spinBand");
+  if (band) { band.style.display = lim && lim.minY !== null ? "" : "none"; if (lim && lim.minY !== null) band.setAttribute("y", (-lim.minY * 47).toFixed(1)); }
 }
 function openSpin() { if (mode !== "aim") return; big.hidden = false; }
 function closeSpin() { big.hidden = true; }
@@ -509,8 +541,12 @@ function frame(now) {
     let gap = T.R * 1.4;
     if (mode === "aim" && pulling) gap = pullGap(pullP);
     if (mode === "stroke") { const st = cpu.stroke, t = st.t; const fwd = st.fast ? 0.06 + 0.05 * (1 - st.from / (T.R * 11.4)) : 0.12; gap = t < 0.5 ? T.R * 1.4 + Math.sin(t / 0.5 * Math.PI / 2) * T.R * 6 : Math.max(0, st.from * (1 - (t - 0.5) / fwd)); }
-    const sp = mode === "cpuaim" || (mode === "stroke" && cpu.stroke.d !== undefined && S.players[S.turn].type === "cpu") ? { x: cpu.d ? cpu.d.sx : 0, y: cpu.d ? cpu.d.sy : 0 } : spin;
-    view.setCue(showCue, c, mode === "stroke" ? cpu.stroke.d.angle : aim, sp, gap);
+    let sp = mode === "cpuaim" || (mode === "stroke" && cpu.stroke.d !== undefined && S.players[S.turn].type === "cpu") ? { x: cpu.d ? cpu.d.sx : 0, y: cpu.d ? cpu.d.sy : 0 } : { ...spin };
+    const cAng = mode === "stroke" ? cpu.stroke.d.angle : aim;
+    let lim = null;
+    if (showCue) { lim = cueLimits(c, cAng, sp.y); if (mode === "aim") sp.y = lim.y; }
+    view.setCue(showCue, c, cAng, sp, gap, lim ? lim.elev : 0.07);
+    if (mode === "aim") showCushionLimit(lim);
     const hit = mode === "aim" ? guides() : (view.setGuides(null), null);
     $("inset").hidden = mode !== "aim" || !c.on || viewMode === "top";
     if (!$("inset").hidden) drawOverlap(hit);

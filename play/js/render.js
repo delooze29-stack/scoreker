@@ -476,7 +476,7 @@ export class View {
   potAnimating() { for (const e of this.balls.values()) if (e.pot && e.mesh.visible) return true; return false; }
 
   // -------------------------------------------------------------- cue + guides
-  setCue(show, cue, angle, spin, gap) {
+  setCue(show, cue, angle, spin, gap, elevIn) {
     this.cue.visible = !!show; if (!show) return;
     const R = this.table.R, ux = Math.cos(angle), uy = Math.sin(angle), rx = uy, ry = -ux;
     const depth = R * Math.sqrt(Math.max(0, 1 - (spin.x * spin.x + spin.y * spin.y) * 0.25));
@@ -485,18 +485,7 @@ export class View {
     this.cue.position.copy(V3(tx, tipH, ty));
     this.cue.rotation.set(0, Math.atan2(-ux, uy), 0);
     // How far back along the cue until it crosses the cushion and then the rail? Raise the butt to clear both.
-    // measured from the back of the cue ball, where the tip strikes
-    const { L, W, cw } = this.table, bx = -ux, by = -uy, sx0 = cue.x - ux * R, sy0 = cue.y - uy * R;
-    const exitAt = m => { // distance to the box [-m, L+m] x [-m, W+m]
-      const tx1 = bx > 0 ? (L + m - sx0) / bx : bx < 0 ? (-m - sx0) / bx : Infinity;
-      const ty1 = by > 0 ? (W + m - sy0) / by : by < 0 ? (-m - sy0) / by : Infinity;
-      return Math.max(0.004, Math.min(tx1, ty1));
-    };
-    const need = (d, hgt) => Math.atan2(Math.max(0, hgt - tipH), d);
-    let elev = 0.07;
-    elev = Math.max(elev, need(exitAt(0), R * 1.4 + 0.008));   // over the cushion
-    elev = Math.max(elev, need(exitAt(cw), this.rh + 0.012));  // over the wooden rail
-    elev = Math.min(elev, 0.6);
+    const elev = elevIn == null ? 0.07 : elevIn;
     this.cueElev = this.cueElev == null ? elev : this.cueElev + (elev - this.cueElev) * 0.35;
     this.cueInner.rotation.x = -Math.PI / 2 - this.cueElev;
   }
