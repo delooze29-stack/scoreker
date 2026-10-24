@@ -326,7 +326,13 @@ stage.addEventListener("pointermove", e => {
   const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
   if (!drag.axis && Math.hypot(dx, dy) > 6) drag.axis = Math.abs(dx) >= Math.abs(dy) ? "x" : "y";
   // about 0.07° per pixel: a long, slow drag for fine adjustments
-  if (drag.axis === "x") aim = drag.aim - dx * 0.0012 * (1 - pitch * 0.3) * Math.min(1.4, Math.max(0.6, zoom.aim));
+  // slow drags are very fine (~0.02° per pixel), quick swipes move faster
+  if (drag.axis === "x") {
+    const now = performance.now(), step = e.clientX - (drag.lx ?? drag.x), dtm = Math.max(1, now - (drag.lt ?? now - 16));
+    const v = Math.abs(step) / dtm, k = 0.00035 + 0.0011 * Math.min(1, Math.max(0, (v - 0.15) / 1.2));
+    aim -= step * k * (1 - pitch * 0.3);
+    drag.lx = e.clientX; drag.lt = now;
+  }
   if (drag.axis === "y") humanPitch = pitch = Math.max(0, Math.min(1, drag.pitch - dy * 0.004));
 });
 const up = e => { touches.delete(e.pointerId); if (touches.size < 2) pinch = null; if (!touches.size) drag = null; };
@@ -353,7 +359,7 @@ $("placeDone").onclick = () => {
 $("viewBtn").onclick = () => {
   if (mode === "place") return;
   viewMode = viewMode === "top" ? "aim" : "top"; userTop = viewMode === "top"; camSnap();
-  hint(mode === "aim" ? (viewMode === "aim" ? "Drag ← → to aim · ↑ ↓ to raise the view" : "Tap or drag to point the cue") : "");
+  hint(mode === "aim" ? (viewMode === "aim" ? "Drag left or right to aim, up or down to raise the view, pinch to zoom." : "Tap or drag to point the cue, pinch to zoom.") : "");
 };
 [["aL", 1], ["aR", -1]].forEach(([id, dir]) => {
   const el = $(id); let t1, t2, n = 0; const stop = () => { clearTimeout(t1); clearInterval(t2); };

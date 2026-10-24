@@ -11,21 +11,21 @@ export const SPECS = {
   snooker: {
     name: "Snooker", L: 3.569, W: 1.778, R: 0.02625, cw: 0.05,
     corner: { mouth: 0.088, taper: 0.10, fall: 0.62, knuckle: 0.012, dropR: 0.050 },
-    middle: { mouth: 0.100, spread: 0.36, fall: 0.30, knuckle: 0.016, dropR: 0.054 },
+    middle: { mouth: 0.100, spread: 0.30, fall: 0.30, knuckle: 0.016, dropR: 0.054 },
     mu: { slide: 0.2, roll: 0.016, spin: 16, ball: 0.05, cushion: 0.18 },
     e: { ball: 0.94, cushion: 0.72 }, vmax: 7.0,
   },
   uk: {
     name: "UK 8-ball", L: 1.83, W: 0.915, R: 0.0254, cw: 0.042,
     corner: { mouth: 0.092, taper: 0.08, fall: 0.55, knuckle: 0.012, dropR: 0.050 },
-    middle: { mouth: 0.098, spread: 0.34, fall: 0.30, knuckle: 0.014, dropR: 0.052 },
+    middle: { mouth: 0.098, spread: 0.28, fall: 0.30, knuckle: 0.014, dropR: 0.052 },
     mu: { slide: 0.2, roll: 0.02, spin: 16, ball: 0.05, cushion: 0.18 },
     e: { ball: 0.94, cushion: 0.76 }, vmax: 8.5,
   },
   us: {
     name: "US 8-ball", L: 2.24, W: 1.12, R: 0.028575, cw: 0.05,
     corner: { mouth: 0.118, taper: 0.12, fall: 0.45, knuckle: 0.008, dropR: 0.062 },
-    middle: { mouth: 0.132, spread: 0.30, fall: 0.30, knuckle: 0.010, dropR: 0.066 },
+    middle: { mouth: 0.132, spread: 0.26, fall: 0.30, knuckle: 0.010, dropR: 0.066 },
     mu: { slide: 0.2, roll: 0.018, spin: 16, ball: 0.05, cushion: 0.18 },
     e: { ball: 0.95, cushion: 0.78 }, vmax: 10.0,
   },
@@ -92,8 +92,13 @@ export function buildTable(gameId) {
   // Middle pockets sit on the long rails (y=0 and y=W); corners join a long and a short rail.
   pockets.forEach((p, i) => {
     p.id = i;
-    const dc = p.fall + p.dropR * 0.92;
-    p.drop = { x: p.M.x + p.o.x * dc, y: p.M.y + p.o.y * dc, r: p.dropR };
+    // The hole: a circle whose front edge is where the ball drops and which passes through the back
+    // ends of both cushion jaws, so the pocket reads as a round opening with no flat shelf around it.
+    const ends = [p.endEntry, p.endExit].map(e => ({ depth: (e.x - p.M.x) * p.o.x + (e.y - p.M.y) * p.o.y, side: Math.abs((e.x - p.M.x) * p.o.y - (e.y - p.M.y) * p.o.x) }));
+    const dEnd = (ends[0].depth + ends[1].depth) / 2, hg = (ends[0].side + ends[1].side) / 2, f = p.fall;
+    let dc = (f * f - dEnd * dEnd - hg * hg) / (2 * (f - dEnd)), rr = dc - f;
+    if (!(rr > 0) || rr > p.mouth * 0.85) { rr = Math.min(p.mouth * 0.85, Math.max(p.dropR * 0.8, hg + 0.004)); dc = f + rr; }
+    p.drop = { x: p.M.x + p.o.x * dc, y: p.M.y + p.o.y * dc, r: rr + 0.0015 };
     // where to aim the object ball: just inside the mouth
     p.aim = { x: p.M.x + p.o.x * p.fall * 0.3, y: p.M.y + p.o.y * p.fall * 0.3 };
   });

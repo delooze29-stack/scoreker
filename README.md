@@ -36,7 +36,7 @@ Roughly 10–40 API credits a week, well under the free 500 a month. You can als
 
 ## Cue Club
 
-`play/` is a full 3D snooker and pool game, linked from the **Cue Club** tab in the bottom menu: snooker, UK 8-ball (pub two-shot rules), US 8-ball and 9-ball, against the computer (Easy, Medium, Hard, Pro) or a friend on the same phone. The physics (sliding and rolling, spin, throw, side off cushions, pocket jaws) is in `play/js/physics.js`, the rules in `play/js/rules.js` and the computer player in `play/js/ai.js`. It runs entirely in the browser: no login, no Firebase, nothing saved. The Practice table is linked from its menu.
+`play/` is a full 3D snooker and pool game, linked from the **Cue Club** tab in the bottom menu: snooker, UK 8-ball (pub two-shot rules with the skill-shot rule), US 8-ball and 9-ball, against the computer (Easy, Medium, Hard, Pro) or a friend on the same phone. The physics (sliding and rolling, spin, throw, side off cushions, pocket jaws) is in `play/js/physics.js`, the rules in `play/js/rules.js` and the computer player in `play/js/ai.js`. It runs entirely in the browser: no login, no Firebase, nothing saved. The Practice table is linked from its menu.
 
 ## Practice table
 

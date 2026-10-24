@@ -168,6 +168,7 @@ export class View {
 
     // cloth with the pocket drops cut out
     const clothMat = new THREE.MeshStandardMaterial({ color: 0xffffff, map: clothTex(st.cloth, [L * 6, W * 6]), roughness: .92, envMapIntensity: .1 });
+    clothMat.shadowSide = THREE.DoubleSide; // the bed must block the light, or ball shadows show on the floor underneath
     const bed = new THREE.Shape(); bed.moveTo(-cw, -cw); bed.lineTo(L + cw, -cw); bed.lineTo(L + cw, W + cw); bed.lineTo(-cw, W + cw); bed.closePath();
     table.pockets.forEach(p => { const h = new THREE.Path(); h.absarc(p.drop.x, p.drop.y, p.drop.r, 0, Math.PI * 2, true); bed.holes.push(h); });
     const cloth = new THREE.Mesh(new THREE.ShapeGeometry(bed, 48), clothMat); cloth.rotation.x = -Math.PI / 2; cloth.receiveShadow = true; cloth.castShadow = true; G.add(cloth);
@@ -175,14 +176,6 @@ export class View {
     const ao = canvasTex(128, 128, (g, w, h) => { const gr = g.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2); gr.addColorStop(0, "rgba(0,0,0,.7)"); gr.addColorStop(.6, "rgba(0,0,0,.5)"); gr.addColorStop(1, "rgba(0,0,0,0)"); g.fillStyle = gr; g.fillRect(0, 0, w, h); });
     const aoMat = new THREE.MeshBasicMaterial({ map: ao, transparent: true, depthWrite: false });
     table.pockets.forEach(p => { const m = new THREE.Mesh(new THREE.PlaneGeometry((p.drop.r + 0.035) * 2, (p.drop.r + 0.035) * 2), aoMat); m.rotation.x = -Math.PI / 2; m.position.copy(V3(p.drop.x, 0.0012, p.drop.y)); G.add(m); });
-    const edge = canvasTex(4, 64, (g, w, h) => { const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, "rgba(0,0,0,.45)"); gr.addColorStop(1, "rgba(0,0,0,0)"); g.fillStyle = gr; g.fillRect(0, 0, w, h); });
-    const edgeMat = new THREE.MeshBasicMaterial({ map: edge, transparent: true, depthWrite: false });
-    [[L / 2, 0, L, 0], [L / 2, W, L, Math.PI], [0, W / 2, W, -Math.PI / 2], [L, W / 2, W, Math.PI / 2]].forEach(([x, y, ln, rz]) => {
-      const m = new THREE.Mesh(new THREE.PlaneGeometry(ln, 0.035), edgeMat); m.rotation.set(-Math.PI / 2, 0, rz);
-      const o = 0.0175; m.position.copy(V3(x + (rz === -Math.PI / 2 ? o : rz === Math.PI / 2 ? -o : 0), 0.001, y + (rz === 0 ? o : rz === Math.PI ? -o : 0)));
-      G.add(m);
-    });
-
     // markings
     const markMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: .5 });
     const m = marks(game);

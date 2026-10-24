@@ -275,7 +275,10 @@ function resolvePool(s, sum) {
   if (first === null) foul = "missed every ball";
   else if (!legal.has(first)) foul = `hit the ${d(first).kind === blackKind ? blackName : d(first).name} first`;
   if (pots.includes(0)) foul = foul || "potted the cue ball";
-  if (grp && pots.some(id => id && d(id).kind !== grp && d(id).kind !== blackKind)) foul = foul || "potted an opponent's ball";
+  // Skill shot rule: hitting your own ball first and potting theirs is fine, you just lose the turn
+  // (unless one of yours went too). On the black (UK) it's a foul.
+  const theirsDown = grp ? pots.filter(id => id && d(id).kind !== grp && d(id).kind !== blackKind) : [];
+  if (theirsDown.length && g === "uk" && onBlack) foul = foul || "potted an opponent's ball while on the black";
   if (g === "us" && !foul && !pots.length && !sum.cushionAfterHit && !s.isBreak) foul = "didn't send a ball to a cushion";
   const blackDown = pots.some(id => id && d(id).kind === blackKind);
   let text;
@@ -309,9 +312,15 @@ function resolvePool(s, sum) {
   const mine = s.groups[me];
   const ownPots = mine ? colourPots.filter(id => d(id).kind === mine) : [];
   s.freeTable = false;
+  const theirsTxt = theirsDown.length ? ` and ${theirsDown.length > 1 ? `${theirsDown.length} of theirs` : "one of theirs"}` : "";
   if (ownPots.length) {
-    text = `${nameOf(s, me)} potted ${ownPots.length > 1 ? `${ownPots.length} ${mine}s` : `a ${mine}`}${!grp ? ` and ${vb(s, me, "takes", "take")} ${mine}s` : ""}.`;
+    text = `${nameOf(s, me)} potted ${ownPots.length > 1 ? `${ownPots.length} ${mine}s` : `a ${mine}`}${theirsTxt}${!grp ? ` and ${vb(s, me, "takes", "take")} ${mine}s` : ""}.`;
     return { foul: null, text, potted: pots, keep: true };
+  }
+  if (theirsDown.length) { // their ball went in off a legal shot: no foul, but the turn is over
+    s.turn = opp; s.visits = 1;
+    text = `${nameOf(s, me)} potted ${theirsDown.length > 1 ? `${theirsDown.length} of ${nameOf(s, opp) === "You" ? "your" : "their"} balls` : `one of ${nameOf(s, opp) === "You" ? "your" : "their"} balls`}. Not a foul, but ${nameOf(s, opp)} to play.`;
+    return { foul: null, text, potted: pots, keep: false };
   }
   if (s.visits > 1) { s.visits--; text = `${nameOf(s, me)} missed but ${vb(s, me, "has", "have")} another shot.`; return { foul: null, text, potted: pots, keep: true }; }
   s.turn = opp; s.visits = 1;
