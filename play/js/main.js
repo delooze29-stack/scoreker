@@ -25,55 +25,63 @@ let T, S, W, view, mode = "menu", aim = 0, pitch = 0, spin = { x: 0, y: 0 }, vie
 let cpu = null, follow = null, place = null, lastEvent = 0, frameFirst = 0, match = null, between = 0;
 
 // ---------------------------------------------------------------- sound (synthesised, no files)
-// Each contact is a short shaped burst: balls give a hard "clack", cushions a dull thump,
-// pockets a drop and rattle, the cue tip a soft "tock". Louder for harder contacts.
+// Built like the real thing: a hard impact is a 1–2 ms click followed by a few short ringing
+// resonances. Balls ring high (resin balls, ~3–7 kHz) and die in ~10 ms; the cushion is a soft,
+// low thud; a pocket is a thud with a little rattle; the tip is a muffled "tok".
 const Snd = {
-  ctx: null, noise: null, recent: [],
+  ctx: null, recent: [],
   init() {
     if (!this.ctx) try {
       const c = this.ctx = new (window.AudioContext || window.webkitAudioContext)();
-      const n = this.noise = c.createBuffer(1, Math.floor(c.sampleRate * 0.4), c.sampleRate), d = n.getChannelData(0);
+      this.master = c.createGain(); this.master.gain.value = 0.8; this.master.connect(c.destination);
+      const n = this.noise = c.createBuffer(1, Math.floor(c.sampleRate * 0.05), c.sampleRate), d = n.getChannelData(0);
       for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-      this.master = c.createGain(); this.master.gain.value = 0.9;
-      const comp = c.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 6;
-      this.master.connect(comp); comp.connect(c.destination);
+      // a small room so it isn't bone dry
+      const len = Math.floor(c.sampleRate * 0.35), ir = c.createBuffer(2, len, c.sampleRate);
+      for (let ch = 0; ch < 2; ch++) { const x = ir.getChannelData(ch); for (let i = 0; i < len; i++) x[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3) * 0.5; }
+      this.verb = c.createConvolver(); this.verb.buffer = ir; const vg = c.createGain(); vg.gain.value = 0.12; this.verb.connect(vg); vg.connect(this.master);
     } catch (e) {}
     if (this.ctx && this.ctx.state === "suspended") this.ctx.resume();
   },
-  burst(t, dur, vol, type, freq, q) { // filtered noise with a sharp attack
+  out(node) { node.connect(this.master); if (this.verb) node.connect(this.verb); },
+  click(t, vol, hp) { // the very start of the impact
     const c = this.ctx, src = c.createBufferSource(); src.buffer = this.noise;
-    const f = c.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = q;
-    const g = c.createGain(); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + 0.0015); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    src.connect(f); f.connect(g); g.connect(this.master); src.start(t, Math.random() * 0.3); src.stop(t + dur + 0.02);
+    const f = c.createBiquadFilter(); f.type = "highpass"; f.frequency.value = hp;
+    const g = c.createGain(); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.004);
+    src.connect(f); f.connect(g); this.out(g); src.start(t); src.stop(t + 0.01);
   },
-  tone(t, dur, vol, f0, f1) {
-    const c = this.ctx, o = c.createOscillator(), g = c.createGain(); o.type = "sine";
-    o.frequency.setValueAtTime(f0, t); if (f1) o.frequency.exponentialRampToValueAtTime(f1, t + dur);
-    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + 0.002); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    o.connect(g); g.connect(this.master); o.start(t); o.stop(t + dur + 0.02);
+  ring(t, freq, decay, vol) { // one damped resonance
+    const c = this.ctx, o = c.createOscillator(), g = c.createGain();
+    o.frequency.value = freq; g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + decay);
+    o.connect(g); this.out(g); o.start(t); o.stop(t + decay + 0.01);
+  },
+  thud(t, f0, f1, dur, vol) {
+    const c = this.ctx, o = c.createOscillator(), g = c.createGain();
+    o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + 0.003); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); this.out(g); o.start(t); o.stop(t + dur + 0.01);
   },
   hit(v, kind) {
     if (!cfg.sound || !this.ctx) return;
-    const c = this.ctx, t = c.currentTime;
-    this.recent = this.recent.filter(x => t - x < 0.06);
-    if (this.recent.length > 5) return; // a busy break shouldn't turn into noise
-    const k = Math.min(1, Math.pow(Math.max(0, v) / 3.2, 0.7));
+    const t = this.ctx.currentTime + 0.005;
+    this.recent = this.recent.filter(x => t - x < 0.05);
+    if (this.recent.length > 4) return;
+    const k = Math.min(1, Math.pow(Math.max(0, v) / 3, 0.75)), j = 1 + (Math.random() - 0.5) * 0.06;
     if (kind === "ball") {
-      if (v < 0.06) return; this.recent.push(t);
-      this.burst(t, 0.035, 0.9 * k, "bandpass", 3400 + Math.random() * 500, 1.6);
-      this.tone(t, 0.018, 0.25 * k, 2600 + Math.random() * 300);
+      if (v < 0.05) return; this.recent.push(t);
+      this.click(t, 0.5 * k, 2500);
+      this.ring(t, 3150 * j, 0.012, 0.32 * k); this.ring(t, 4720 * j, 0.008, 0.2 * k); this.ring(t, 6900 * j, 0.005, 0.1 * k);
     } else if (kind === "cush") {
       if (v < 0.08) return; this.recent.push(t);
-      this.burst(t, 0.09, 0.55 * k, "lowpass", 700, 0.8);
-      this.tone(t, 0.08, 0.35 * k, 150, 90);
+      this.thud(t, 210, 120, 0.07, 0.45 * k); this.ring(t, 620 * j, 0.03, 0.06 * k);
     } else if (kind === "pot") {
       this.recent.push(t);
-      this.tone(t, 0.16, 0.5, 120, 60);
-      this.burst(t, 0.22, 0.35, "lowpass", 500, 0.7);
-      this.burst(t + 0.09, 0.05, 0.18, "bandpass", 1800, 2); // rattle in the drop
+      this.thud(t, 140, 70, 0.14, 0.5);
+      [0.05, 0.11, 0.16].forEach((d, i) => { this.click(t + d, 0.12 / (i + 1), 1800); this.ring(t + d, 2400 * j, 0.01, 0.05 / (i + 1)); });
     } else if (kind === "cue") {
-      this.burst(t, 0.03, 0.55 * k + 0.1, "bandpass", 1500, 2.2);
-      this.tone(t, 0.035, 0.22 * k + 0.05, 700, 500);
+      this.click(t, 0.25 * k + 0.05, 900);
+      this.ring(t, 1250 * j, 0.012, 0.25 * k + 0.05); this.ring(t, 2300 * j, 0.007, 0.12 * k);
+      this.thud(t, 180, 110, 0.05, 0.25 * k);
     }
   },
 };
@@ -225,7 +233,7 @@ function cueLimits(c, angle, sy) {
 
 // Power comes from pulling the cue back: the further, the harder (with finer control at the soft end).
 let lastPower = 0.4, pullP = 0;
-const speedFor = p => T.spec.vmax * (0.025 + 0.975 * Math.pow(p, 1.45));
+const speedFor = p => T.spec.vmax * (0.02 + 0.98 * Math.pow(p, 1.7));
 function shoot(p = lastPower) {
   if (mode !== "aim") return;
   Snd.init(); lastPower = p;
@@ -267,6 +275,7 @@ const release = () => {
 pullEl.addEventListener("pointerup", release); pullEl.addEventListener("pointercancel", () => { pulling = null; pullP = 0; showPull(0); });
 function strike(d) {
   d = { ...d, sy: cueLimits(cueBall(), d.angle, d.sy).y };
+  if (S.players[S.turn].type === "human") setSpin(0, 0); // next shot starts from centre ball
   W.strike(0, d.angle, d.speed, d.sx, d.sy);
   Snd.hit(d.speed, "cue");
   lastEvent = 0; mode = "run";
@@ -478,17 +487,25 @@ function drawOverlap(hit) {
 }
 
 // ---------------------------------------------------------------- guides
+// cut a guide line where it would leave the playing area
+function clip(a, b) {
+  const R = T.R, lo = { x: R, y: R }, hi = { x: T.L - R, y: T.W - R };
+  let t = 1; const dx = b.x - a.x, dy = b.y - a.y;
+  if (dx > 0) t = Math.min(t, (hi.x - a.x) / dx); if (dx < 0) t = Math.min(t, (lo.x - a.x) / dx);
+  if (dy > 0) t = Math.min(t, (hi.y - a.y) / dy); if (dy < 0) t = Math.min(t, (lo.y - a.y) / dy);
+  t = Math.max(0, t); return { x: a.x + dx * t, y: a.y + dy * t };
+}
 function guides() {
   if (mode !== "aim" || cfg.guides === "off") { view.setGuides(null); return castFirst(T, W.balls, 0, aim); }
-  const c = cueBall(), hit = castFirst(T, W.balls, 0, aim), g = { from: c, to: hit };
+  const c = cueBall(), hit = castFirst(T, W.balls, 0, aim), g = { from: c, to: clip(c, hit) };
   if (hit.ball) {
     g.ghost = hit;
     const nx = hit.ball.x - hit.x, ny = hit.ball.y - hit.y, nl = Math.hypot(nx, ny), n = { x: nx / nl, y: ny / nl };
     const len = cfg.guides === "full" ? 0.55 : 0.14;
-    g.objFrom = hit.ball; g.objTo = { x: hit.ball.x + n.x * len, y: hit.ball.y + n.y * len };
+    g.objFrom = hit.ball; g.objTo = clip(hit.ball, { x: hit.ball.x + n.x * len, y: hit.ball.y + n.y * len });
     if (cfg.guides === "full") {
       const ux = Math.cos(aim), uy = Math.sin(aim), dn = ux * n.x + uy * n.y; let tx = ux - dn * n.x, ty = uy - dn * n.y; const tl = Math.hypot(tx, ty);
-      if (tl > 0.02) { tx /= tl; ty /= tl; g.cueFrom = hit; g.cueTo = { x: hit.x + tx * 0.25 * tl, y: hit.y + ty * 0.25 * tl }; }
+      if (tl > 0.02) { tx /= tl; ty /= tl; g.cueFrom = hit; g.cueTo = clip(hit, { x: hit.x + tx * 0.25 * tl, y: hit.y + ty * 0.25 * tl }); }
     }
   } else g.ghost = hit;
   view.setGuides(g);
@@ -498,8 +515,15 @@ function guides() {
 // ---------------------------------------------------------------- main loop
 const DTMAX = /[?&]fast/.test(location.search) ? 0.6 : 0.1;
 const viewState = { mode: "aim", pitch: 0, angle: 0, cue: { x: 0, y: 0 }, snap: true };
-let last = performance.now();
+let last = performance.now(), slow = 0, fast = 0;
+function adapt(ms) {
+  if (!view) return;
+  if (ms > 26) { slow++; fast = 0; } else if (ms < 17) { fast++; slow = 0; } else { slow = Math.max(0, slow - 1); fast = Math.max(0, fast - 1); }
+  if (slow > 40) { view.scaleResolution(0.85); slow = 0; }
+  if (fast > 240) { view.scaleResolution(1.08); fast = 0; }
+}
 function frame(now) {
+  adapt(now - last);
   const dt = Math.min(DTMAX, (now - last) / 1000); last = now;
   if (S && W) {
     const c = cueBall();

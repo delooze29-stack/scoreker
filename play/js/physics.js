@@ -10,24 +10,24 @@ export const G = 9.81;
 export const SPECS = {
   snooker: {
     name: "Snooker", L: 3.569, W: 1.778, R: 0.02625, cw: 0.05,
-    corner: { mouth: 0.088, taper: 0.10, fall: 0.62, knuckle: 0.012, dropR: 0.050 },
-    middle: { mouth: 0.100, spread: 0.14, fall: 0.30, knuckle: 0.016, dropR: 0.054 },
-    mu: { slide: 0.2, roll: 0.016, spin: 16, ball: 0.05, cushion: 0.18 },
-    e: { ball: 0.94, cushion: 0.72 }, vmax: 7.0,
+    corner: { mouth: 0.095, taper: 0.10, fall: 0.42, knuckle: 0.012, dropR: 0.050 },
+    middle: { mouth: 0.107, spread: 0.14, fall: 0.25, knuckle: 0.016, dropR: 0.054 },
+    mu: { slide: 0.2, roll: 0.023, spin: 18, ball: 0.05, cushion: 0.18 },
+    e: { ball: 0.94, cushion: 0.68 }, vmax: 7.0,
   },
   uk: {
     name: "UK 8-ball", L: 1.83, W: 0.915, R: 0.0254, cw: 0.042,
-    corner: { mouth: 0.092, taper: 0.08, fall: 0.55, knuckle: 0.012, dropR: 0.050 },
-    middle: { mouth: 0.098, spread: 0.14, fall: 0.30, knuckle: 0.014, dropR: 0.052 },
-    mu: { slide: 0.2, roll: 0.02, spin: 16, ball: 0.05, cushion: 0.18 },
-    e: { ball: 0.94, cushion: 0.76 }, vmax: 8.5,
+    corner: { mouth: 0.099, taper: 0.08, fall: 0.40, knuckle: 0.012, dropR: 0.050 },
+    middle: { mouth: 0.105, spread: 0.14, fall: 0.25, knuckle: 0.014, dropR: 0.052 },
+    mu: { slide: 0.2, roll: 0.027, spin: 18, ball: 0.05, cushion: 0.18 },
+    e: { ball: 0.94, cushion: 0.71 }, vmax: 8.5,
   },
   us: {
     name: "US 8-ball", L: 2.24, W: 1.12, R: 0.028575, cw: 0.05,
-    corner: { mouth: 0.118, taper: 0.12, fall: 0.45, knuckle: 0.008, dropR: 0.062 },
-    middle: { mouth: 0.132, spread: 0.15, fall: 0.30, knuckle: 0.010, dropR: 0.066 },
-    mu: { slide: 0.2, roll: 0.018, spin: 16, ball: 0.05, cushion: 0.18 },
-    e: { ball: 0.95, cushion: 0.78 }, vmax: 10.0,
+    corner: { mouth: 0.125, taper: 0.12, fall: 0.35, knuckle: 0.008, dropR: 0.062 },
+    middle: { mouth: 0.139, spread: 0.15, fall: 0.25, knuckle: 0.010, dropR: 0.066 },
+    mu: { slide: 0.2, roll: 0.025, spin: 18, ball: 0.05, cushion: 0.18 },
+    e: { ball: 0.95, cushion: 0.73 }, vmax: 10.0,
   },
 };
 

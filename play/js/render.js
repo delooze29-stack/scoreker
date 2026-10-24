@@ -23,6 +23,16 @@ function clothTex(color, rep) {
     for (let y = 0; y < h; y += 2) { g.beginPath(); g.moveTo(0, y + Math.random()); g.lineTo(w, y + Math.random()); g.stroke(); }
   }, rep);
 }
+function fibreNormal(rep) { // a fine woven normal map for the cloth
+  const c = document.createElement("canvas"); c.width = c.height = 256; const g = c.getContext("2d");
+  const img = g.createImageData(256, 256);
+  for (let y = 0; y < 256; y++) for (let x = 0; x < 256; x++) {
+    const i = (y * 256 + x) * 4, n = Math.random() - 0.5, weave = Math.sin(x * 0.9) * 0.25 + Math.sin(y * 1.3) * 0.15;
+    img.data[i] = 128 + (n * 50 + weave * 60); img.data[i + 1] = 128 + (Math.random() - 0.5) * 50 - weave * 40; img.data[i + 2] = 255; img.data[i + 3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rep[0], rep[1]); t.anisotropy = 8; return t;
+}
 function woodTex(color) {
   return canvasTex(1024, 128, (g, w, h) => {
     g.fillStyle = hex(color); g.fillRect(0, 0, w, h);
@@ -99,10 +109,17 @@ export class View {
     if (this.composer) { this.composer.setPixelRatio(this.renderer.getPixelRatio()); this.composer.setSize(w, h); }
   }
   // High: bloom on the highlights and lights, HDR tone mapping, sharper shadows. Standard: lighter on the phone.
+  // Smoothness first: lower the drawing resolution a step when the phone can't keep up.
+  scaleResolution(f) {
+    const r = this.renderer, max = Math.min(window.devicePixelRatio || 1, this.quality === "high" ? 2.5 : 1.5);
+    const pr = Math.max(0.75, Math.min(max, r.getPixelRatio() * f));
+    if (Math.abs(pr - r.getPixelRatio()) < 0.02) return;
+    r.setPixelRatio(pr); this.resize();
+  }
   setQuality(q) {
     this.quality = q;
     const r = this.renderer;
-    r.setPixelRatio(Math.min(window.devicePixelRatio || 1, q === "high" ? 2 : 1.5));
+    r.setPixelRatio(Math.min(window.devicePixelRatio || 1, q === "high" ? 2.5 : 1.5));
     this.composer = null;
     if (q === "high" && THREE.EffectComposer && THREE.UnrealBloomPass) {
       try {
@@ -152,7 +169,7 @@ export class View {
     // lights
     G.add(new THREE.HemisphereLight(0xfff3dd, studio ? 0x2a3040 : 0x0a0d0b, studio ? 0.55 : 0.22));
     const sun = new THREE.DirectionalLight(0xfff1d6, studio ? 0.8 : 0.6); sun.position.set(L / 2 + 0.2, 3, -W / 2 - 0.3); sun.target.position.set(L / 2, 0, -W / 2);
-    sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.0002; sun.shadow.normalBias = 0.003; sun.shadow.radius = 3;
+    sun.castShadow = true; sun.shadow.mapSize.set(this.quality === "high" ? 4096 : 2048, this.quality === "high" ? 4096 : 2048); sun.shadow.bias = -0.0002; sun.shadow.normalBias = 0.003; sun.shadow.radius = 3;
     Object.assign(sun.shadow.camera, { left: -L / 2 - 0.4, right: L / 2 + 0.4, top: W / 2 + 0.4, bottom: -W / 2 - 0.4, near: 1.5, far: 4.5 });
     G.add(sun, sun.target);
     const nSpots = L > 3 ? 4 : L > 2 ? 3 : 2;
@@ -167,10 +184,22 @@ export class View {
     this.canopy = [canopy, glow];
 
     // cloth with the pocket drops cut out
-    const clothMat = new THREE.MeshStandardMaterial({ color: 0xffffff, map: clothTex(st.cloth, [L * 6, W * 6]), roughness: .92, envMapIntensity: .1 });
+    const clothMat = new THREE.MeshStandardMaterial({ color: 0xffffff, map: clothTex(st.cloth, [L * 6, W * 6]), roughness: .92, envMapIntensity: .1, normalMap: fibreNormal([L * 9, W * 9]), normalScale: new THREE.Vector2(0.35, 0.35) });
     clothMat.shadowSide = THREE.DoubleSide; // the bed must block the light, or ball shadows show on the floor underneath
     const bed = new THREE.Shape(); bed.moveTo(-cw, -cw); bed.lineTo(L + cw, -cw); bed.lineTo(L + cw, W + cw); bed.lineTo(-cw, W + cw); bed.closePath();
-    table.pockets.forEach(p => { const h = new THREE.Path(); h.absarc(p.drop.x, p.drop.y, p.drop.r, 0, Math.PI * 2, true); bed.holes.push(h); });
+    // each hole runs from the pocket mouth (the cushion points) back between the jaws and round the drop
+    const holeOutline = p => {
+      const c = p.drop, cx = L / 2, cy = W / 2, pts = [p.noseEntry, p.cutEntry];
+      const a = Math.atan2(p.cutEntry.y - c.y, p.cutEntry.x - c.x), b0 = Math.atan2(p.cutExit.y - c.y, p.cutExit.x - c.x);
+      const b1 = b0 > a ? b0 : b0 + Math.PI * 2, b2 = b0 < a ? b0 : b0 - Math.PI * 2;
+      const far = bb => { const m = (a + bb) / 2; return Math.hypot(c.x + Math.cos(m) * c.r - cx, c.y + Math.sin(m) * c.r - cy); };
+      const b = far(b1) > far(b2) ? b1 : b2;
+      for (let i = 1; i < 40; i++) { const t = a + (b - a) * i / 40; pts.push({ x: c.x + Math.cos(t) * c.r, y: c.y + Math.sin(t) * c.r }); }
+      pts.push(p.cutExit, p.noseExit);
+      return pts;
+    };
+    this.holeShapes = table.pockets.map(holeOutline);
+    this.holeShapes.forEach(pts => { const h = new THREE.Path(); pts.forEach((q, i) => i ? h.lineTo(q.x, q.y) : h.moveTo(q.x, q.y)); h.closePath(); bed.holes.push(h); });
     const cloth = new THREE.Mesh(new THREE.ShapeGeometry(bed, 48), clothMat); cloth.rotation.x = -Math.PI / 2; cloth.receiveShadow = true; cloth.castShadow = true; G.add(cloth);
     // soft shading along the cushions and round the drops
     const ao = canvasTex(128, 128, (g, w, h) => { const gr = g.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2); gr.addColorStop(0, "rgba(0,0,0,.7)"); gr.addColorStop(.6, "rgba(0,0,0,.5)"); gr.addColorStop(1, "rgba(0,0,0,0)"); g.fillStyle = gr; g.fillRect(0, 0, w, h); });
@@ -227,6 +256,19 @@ export class View {
     const fallMat = new THREE.MeshStandardMaterial({ color: 0xffffff, map: clothTex(new THREE.Color(st.cloth).multiplyScalar(.5).getHex()), roughness: .95, envMapIntensity: 0, side: THREE.DoubleSide });
     const plateMat = new THREE.MeshStandardMaterial({ color: st.plate, roughness: st.plateRough, metalness: st.plateMetal, envMapIntensity: .7 });
     const netMat = new THREE.MeshStandardMaterial({ color: 0x151515, roughness: 1, side: THREE.DoubleSide });
+    const throatMat = new THREE.MeshBasicMaterial({ color: 0x040404 });
+    this.holeShapes.forEach(pts => {
+      const sh = new THREE.Shape(); pts.forEach((q, i) => i ? sh.lineTo(q.x, q.y) : sh.moveTo(q.x, q.y)); sh.closePath();
+      const m = new THREE.Mesh(new THREE.ShapeGeometry(sh), throatMat); m.rotation.x = -Math.PI / 2; m.position.y = -0.012; G.add(m);
+      // the cloth turns down over the lip of the hole
+      const pos = [], n = pts.length;
+      for (let i = 0; i < n; i++) {
+        const p0 = pts[i], p1 = pts[(i + 1) % n];
+        pos.push(p0.x, 0, -p0.y, p1.x, 0, -p1.y, p1.x, -0.013, -p1.y, p0.x, 0, -p0.y, p1.x, -0.013, -p1.y, p0.x, -0.013, -p0.y);
+      }
+      const wg = new THREE.BufferGeometry(); wg.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); wg.computeVertexNormals();
+      G.add(new THREE.Mesh(wg, fallMat));
+    });
     table.pockets.forEach(p => {
       const c = V3(p.drop.x, 0, p.drop.y), hr = p.drop.r;
       const fall = new THREE.Mesh(new THREE.CylinderGeometry(hr, hr * 0.74, 0.04, 40, 1, true), fallMat); fall.position.set(c.x, -0.02, c.z); G.add(fall);
@@ -387,7 +429,7 @@ export class View {
     const R = this.table.R;
     this.blobGeo = new THREE.PlaneGeometry(R * 2.6, R * 2.6);
     this.blobMat = new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, map: canvasTex(64, 64, (g, w, h) => { const gr = g.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2); gr.addColorStop(0, "rgba(0,0,0,.75)"); gr.addColorStop(.45, "rgba(0,0,0,.35)"); gr.addColorStop(1, "rgba(0,0,0,0)"); g.fillStyle = gr; g.fillRect(0, 0, w, h); }) });
-    const geo = new THREE.SphereGeometry(this.table.R, 48, 32);
+    const geo = new THREE.SphereGeometry(this.table.R, 64, 44);
     for (const d of def(game, 0) ? defsList(game) : []) {
       const mat = new THREE.MeshPhysicalMaterial({ color: 0xffffff, map: ballTex(game, d), roughness: .1, clearcoat: 1, clearcoatRoughness: .04, envMapIntensity: 1 });
       const m = new THREE.Mesh(geo, mat); m.castShadow = true;
