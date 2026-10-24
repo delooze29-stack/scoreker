@@ -20,9 +20,11 @@ const GAMES = [
   { id: "nine", name: "9-ball", note: "Lowest ball first, pot the 9 to win", cloth: "#1673b8", wood: "#161412", balls: ["#f2b705", "#1d3fae", "#7a1f1a", "#f2b705"] },
 ];
 
-const cfg = { game: "snooker", opp: "medium", bestOf: 1, guides: "full", sound: true, quality: "high" };
+const cfg = { game: "snooker", opp: "medium", bestOf: 1, guides: "full", sound: true, quality: "high", cue: "stroke" };
+try { const c = JSON.parse(localStorage.getItem("cueclub.cfg") || "{}"); for (const k of ["guides", "quality", "cue", "opp", "bestOf"]) if (c[k] != null) cfg[k] = c[k]; } catch (_) {}
+const saveCfg = () => { try { localStorage.setItem("cueclub.cfg", JSON.stringify(cfg)); } catch (_) {} };
 let T, S, W, view, mode = "menu", aim = 0, pitch = 0, spin = { x: 0, y: 0 }, viewMode = "aim";
-let cpu = null, follow = null, place = null, lastEvent = 0, frameFirst = 0, match = null, between = 0;
+let cpu = null, through = null, follow = null, place = null, lastEvent = 0, frameFirst = 0, match = null, between = 0;
 
 // ---------------------------------------------------------------- sound (synthesised, no files)
 // Built like the real thing: a hard impact is a 1–2 ms click followed by a few short ringing
@@ -42,6 +44,19 @@ const Snd = {
       this.verb = c.createConvolver(); this.verb.buffer = ir; const vg = c.createGain(); vg.gain.value = 0.12; this.verb.connect(vg); vg.connect(this.master);
     } catch (e) {}
     if (this.ctx && this.ctx.state === "suspended") this.ctx.resume();
+  },
+  // the low rumble of balls rolling on the cloth, following how much is moving
+  roll(level) {
+    if (!this.ctx) return;
+    if (!this.rollG) {
+      const c = this.ctx, n = c.createBuffer(1, c.sampleRate * 2, c.sampleRate), d = n.getChannelData(0);
+      let b = 0; for (let i = 0; i < d.length; i++) { b = b * 0.97 + (Math.random() * 2 - 1) * 0.03; d[i] = b * 6; } // brown-ish noise
+      const src = c.createBufferSource(); src.buffer = n; src.loop = true;
+      const f = c.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = 380; f.Q.value = 0.4;
+      this.rollG = c.createGain(); this.rollG.gain.value = 0; src.connect(f); f.connect(this.rollG); this.rollG.connect(this.master); src.start();
+    }
+    const v = cfg.sound ? Math.min(0.22, level) : 0;
+    this.rollG.gain.setTargetAtTime(v, this.ctx.currentTime, 0.08);
   },
   out(node) { node.connect(this.master); if (this.verb) node.connect(this.verb); },
   click(t, vol, hp) { // the very start of the impact
@@ -91,7 +106,7 @@ function seg(id, items, key, onPick) {
   const el = $(id); el.innerHTML = "";
   items.forEach(([v, label]) => {
     const b = document.createElement("button"); b.type = "button"; b.textContent = label; b.setAttribute("aria-pressed", cfg[key] === v);
-    b.onclick = () => { cfg[key] = v; el.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b)); onPick && onPick(); };
+    b.onclick = () => { cfg[key] = v; saveCfg(); el.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b)); onPick && onPick(); };
     el.appendChild(b);
   });
 }
@@ -106,6 +121,7 @@ function buildMenu() {
   seg("oppPick", [["easy", "Easy"], ["medium", "Medium"], ["hard", "Hard"], ["pro", "Pro"], ["friend", "Friend"]], "opp");
   seg("framePick", [[1, "1"], [3, "3"], [5, "5"]], "bestOf");
   seg("guidePick", [["full", "Full"], ["short", "Short"], ["off", "Off"]], "guides");
+  seg("cuePick", [["stroke", "Stroke it"], ["pull", "Pull & let go"]], "cue", () => showPull(0));
   seg("gfxPick", [["high", "High"], ["standard", "Standard"]], "quality", () => view && view.setQuality(cfg.quality));
 }
 $("startBtn").onclick = () => { Snd.init(); startMatch(); };
@@ -207,7 +223,8 @@ function startAim() {
     if (legal[0]) aim = Math.atan2(legal[0].y - c.y, legal[0].x - c.x);
   }
   camSnap();
-  hint(viewMode === "aim" ? "Drag left or right to aim, up or down to raise the view, pinch to zoom. Pull the cue on the right down, then let go to strike." : "Tap or drag to point the cue. Pull the cue on the right down, then let go to strike.");
+  const how = cfg.cue === "stroke" ? "Hold the cue on the right: draw it back, then push it through the ball. The faster you push, the harder you hit." : "Pull the cue on the right down, then let go to strike.";
+  hint((viewMode === "aim" ? "Drag left or right to aim, up or down to raise the view, pinch to zoom. " : "Tap or drag to point the cue. ") + how);
 }
 let userTop = false, humanPitch = 0.18;
 function camSnap() { viewState.snap = true; const b = $("viewBtn"); b.setAttribute("aria-pressed", viewMode === "top"); b.setAttribute("aria-label", viewMode === "top" ? "Behind the ball view" : "Overhead view"); }
@@ -231,54 +248,114 @@ function cueLimits(c, angle, sy) {
   return { minY: minY > -0.99 ? minY : null, y, elev: Math.min(elev, 0.5) };
 }
 
-// Power comes from pulling the cue back: the further, the harder (with finer control at the soft end).
+// Power. Two ways to play:
+//  "stroke": you hold the cue. Drag down on the cue at the right to draw it back, up to push it
+//            forward; feather back and forth as much as you like. When the tip reaches the ball
+//            the shot goes off, and the speed of your finger at that moment is the power.
+//  "pull":   pull the cue back and let go; the further back, the harder.
 let lastPower = 0.4, pullP = 0;
 const speedFor = p => T.spec.vmax * (0.02 + 0.98 * Math.pow(p, 1.7));
-function shoot(p = lastPower) {
+const powerOf = v => Math.pow(Math.max(0, (v / T.spec.vmax - 0.02) / 0.98), 1 / 1.7);
+const ADDR = () => T.R * 1.4, BACK = () => T.R * 10; // cue tip gap at address, and at full backswing
+const breakBoost = () => S.isBreak && S.game !== "snooker" ? 1.12 : 1; // a full-blooded break
+function shotFor(p) {
+  const lim = cueLimits(cueBall(), aim, spin.y);
+  return { angle: aim, speed: speedFor(p) * breakBoost(), sx: spin.x, sy: lim.y, p };
+}
+function shoot(p = lastPower) { // keyboard / pull & let go: an automatic stroke from the backswing
   if (mode !== "aim") return;
   Snd.init(); lastPower = p;
-  const boost = S.isBreak && S.game !== "snooker" ? 1.12 : 1; // a full-blooded break
-  const lim = cueLimits(cueBall(), aim, spin.y);
-  startStroke({ angle: aim, speed: speedFor(p) * boost, sx: spin.x, sy: lim.y }, pullGap(p));
+  startStroke(shotFor(p), { from: pullGap(p) });
 }
-const pullGap = p => T.R * 1.4 + p * T.R * 10;
-function startStroke(d, pulled) {
+const pullGap = p => ADDR() + p * BACK();
+// An animated stroke (the computer's, or a pull & let go): a couple of feathers, a smooth
+// backswing, a pause, then through the ball.
+function startStroke(d, o = {}) {
   closeSpin();
-  mode = "stroke"; cpu = cpu || {}; cpu.stroke = { d, t: pulled ? 0.5 : 0, from: pulled || T.R * 7.4, fast: !!pulled };
+  const p = d.p != null ? d.p : powerOf(d.speed / breakBoost());
+  const back = o.from || ADDR() + (0.25 + 0.6 * p) * BACK();
+  const feathers = o.from ? 0 : 1;
+  const fwd = 0.07 + 0.16 * (1 - p); // a soft shot is pushed slowly, a hard one fired
+  const ph = { f: feathers * 0.42, b: o.from ? 0 : 0.42, hold: o.from ? 0.06 : 0.16, fwd };
+  mode = "stroke"; cpu = cpu || {}; cpu.stroke = { d, t: 0, back, ph, from: o.from };
   hint("");
 }
-// the pull strip
+function strokeGap(st) {
+  const { ph, back } = st, A = ADDR(); let t = st.t;
+  if (t < ph.f) return A + T.R * 2.2 * (1 - Math.cos(t / 0.42 * Math.PI * 2)) / 2;
+  t -= ph.f;
+  if (t < ph.b) { const k = t / ph.b; return A + (back - A) * (1 - Math.cos(k * Math.PI)) / 2; }
+  t -= ph.b;
+  if (t < ph.hold) return back;
+  t -= ph.hold;
+  const k = Math.min(1, t / ph.fwd); return back * (1 - k * k); // accelerating into the ball
+}
+const strokeDone = st => st.t >= st.ph.f + st.ph.b + st.ph.hold + st.ph.fwd;
+
+// the cue at the right: hold it and move it
 const pullEl = $("pull"), pcue = $("pcue"), pfill = $("pfill"), pval = $("pval");
-let pulling = null;
-function showPull(p) {
-  const h = pullEl.querySelector(".ptrack").clientHeight * 0.8;
-  pcue.style.transform = `translate(-50%, ${p * h}px)`; pfill.style.height = `calc(${p * 100}% - 6px)`;
-  pval.textContent = p > 0.005 ? `${Math.round(p * 100)}%` : "PULL";
-  pullEl.classList.toggle("on", p > 0.005);
-  pullEl.setAttribute("aria-valuenow", Math.round(p * 100));
+let pulling = null, held = null, cueGap = null, powerShow = 0;
+const trackH = () => pullEl.querySelector(".ptrack").clientHeight * 0.8;
+function showPull(p, label) {
+  const h = trackH(), q = Math.max(-0.14, p);
+  pcue.style.transform = `translate(-50%, ${q * h}px)`; pfill.style.height = `calc(${Math.max(0, p) * 100}% - 6px)`;
+  pval.textContent = label || (p > 0.005 && cfg.cue === "pull" ? `${Math.round(p * 100)}%` : cfg.cue === "stroke" ? "STROKE" : "PULL");
+  pullEl.classList.toggle("on", p > 0.005 || !!label);
+  pullEl.setAttribute("aria-valuenow", Math.round(Math.max(0, p) * 100));
+  pullEl.setAttribute("aria-label", cfg.cue === "stroke" ? "Hold the cue: draw it back and push it through the ball" : "Pull the cue back for power, let go to strike");
 }
 pullEl.addEventListener("pointerdown", e => {
   e.stopPropagation(); if (mode !== "aim") return;
-  Snd.init(); pulling = { y: e.clientY }; pullP = 0;
+  Snd.init(); closeSpin(); pullP = 0;
+  if (cfg.cue === "stroke") held = { y0: e.clientY, pos: 0, max: 0, s: [{ t: performance.now(), pos: 0 }] };
+  else pulling = { y: e.clientY };
   try { pullEl.setPointerCapture(e.pointerId); } catch (_) {}
 });
 pullEl.addEventListener("pointermove", e => {
-  if (!pulling || mode !== "aim") return;
-  const h = pullEl.querySelector(".ptrack").clientHeight * 0.8;
+  if (mode !== "aim") return;
+  const h = trackH();
+  if (held) {
+    // the cue follows your finger; run off the bottom and it re-grips so you can always draw further
+    let pos = (e.clientY - held.y0) / h;
+    if (pos > 1) { held.y0 += (pos - 1) * h; pos = 1; }
+    const now = performance.now();
+    held.pos = pos; held.max = Math.max(held.max, pos);
+    held.s.push({ t: now, pos }); while (held.s.length > 2 && now - held.s[0].t > 90) held.s.shift();
+    const o = held.s[0], v = (o.pos - pos) / Math.max(0.008, (now - o.t) / 1000); // forward speed, track heights a second
+    const p = Math.min(1, Math.max(0.01, (v - 0.12) / 3.9));
+    if (v > 0.2) powerShow = Math.max(powerShow * 0.85, p); else powerShow *= 0.9;
+    const contact = -ADDR() / BACK();
+    if (pos <= contact && held.max > 0.04 && v > 0.05) { // tip meets the ball
+      held = null; lastPower = p;
+      try { pullEl.releasePointerCapture(e.pointerId); } catch (_) {}
+      const d = shotFor(p); showPull(0, `${Math.round(p * 100)}%`);
+      strike(d);
+      return;
+    }
+    showPull(Math.max(contact, pos), held.max > 0.04 && v > 0.2 ? `${Math.round(powerShow * 100)}%` : null);
+    return;
+  }
+  if (!pulling) return;
   pullP = Math.max(0, Math.min(1, (e.clientY - pulling.y) / h)); showPull(pullP);
 });
 const release = () => {
+  if (held) { held = null; showPull(0); return; } // let go without striking: the cue settles back
   if (!pulling) return; pulling = null;
   const p = pullP; pullP = 0; showPull(0);
   if (p > 0.02 && mode === "aim") shoot(p);
 };
-pullEl.addEventListener("pointerup", release); pullEl.addEventListener("pointercancel", () => { pulling = null; pullP = 0; showPull(0); });
+pullEl.addEventListener("pointerup", release); pullEl.addEventListener("pointercancel", () => { pulling = null; held = null; pullP = 0; showPull(0); });
 function strike(d) {
   d = { ...d, sy: cueLimits(cueBall(), d.angle, d.sy).y };
   if (S.players[S.turn].type === "human") setSpin(0, 0); // next shot starts from centre ball
+  const c0 = cueBall();
+  const lim0 = cueLimits(c0, d.angle, d.sy);
+  // the cue carries on through where the ball was
+  through = { t: 0, x: c0.x, y: c0.y, angle: d.angle, spin: { x: d.sx, y: d.sy }, elev: lim0.elev, p: d.p != null ? d.p : powerOf(d.speed) };
   W.strike(0, d.angle, d.speed, d.sx, d.sy);
   Snd.hit(d.speed, "cue");
-  lastEvent = 0; mode = "run";
+  if (S.players[S.turn].type === "human" && navigator.vibrate) try { navigator.vibrate(8 + Math.round(through.p * 22)); } catch (_) {}
+  lastEvent = 0; mode = "run"; hint("");
   const c = cueBall();
   const bk = (0.34 + pitch * 1.1) * zoom.aim;
   follow = { eye: { x: c.x - Math.cos(d.angle) * bk, y: c.y - Math.sin(d.angle) * bk }, track: { x: c.x, y: c.y }, angle: d.angle };
@@ -543,12 +620,13 @@ function frame(now) {
       const k = Math.min(1, cpu.t / 1.1), e = k * k * (3 - 2 * k);
       let da = cpu.d.angle - cpu.from; while (da > Math.PI) da -= 2 * Math.PI; while (da < -Math.PI) da += 2 * Math.PI;
       aim = cpu.from + da * e;
-      if (cpu.t > 1.5) startStroke(cpu.d);
+      if (cpu.t > 1.25) startStroke(cpu.d);
     } else if (mode === "stroke") {
       const st = cpu.stroke; st.t += dt;
-      if (st.t > (st.fast ? 0.5 + 0.06 + 0.05 * (1 - st.from / (T.R * 11.4)) : 0.62)) strike(st.d);
+      if (strokeDone(st)) strike(st.d);
     } else if (mode === "run") {
       W.advance(dt);
+      { let e = 0; for (const b of W.balls) if (b.on) e += Math.hypot(b.vx || 0, b.vy || 0); Snd.roll(Math.pow(e, 0.8) * 0.045); }
       for (; lastEvent < W.events.length; lastEvent++) {
         const e = W.events[lastEvent];
         Snd.hit(e.v || 2, e.t === "hit" ? "ball" : e.t === "cush" ? "cush" : "pot");
@@ -563,19 +641,34 @@ function frame(now) {
       if (firstHit && follow.hitT == null) follow.hitT = follow.t;
       if (!follow.high && follow.t > (follow.hitT != null ? follow.hitT + 0.45 : 1.3)) follow.high = true;
       if (!W.moving() && !view.potAnimating()) endShot();
+      if (!W.moving()) Snd.roll(0);
     } else if (mode === "between") {
+      Snd.roll(0);
       between -= dt; if (between <= 0) nextTurn();
     }
     // cue + guides
-    const showCue = (mode === "aim" || mode === "cpuaim" || mode === "stroke") && c.on;
-    let gap = T.R * 1.4;
-    if (mode === "aim" && pulling) gap = pullGap(pullP);
-    if (mode === "stroke") { const st = cpu.stroke, t = st.t; const fwd = st.fast ? 0.06 + 0.05 * (1 - st.from / (T.R * 11.4)) : 0.12; gap = t < 0.5 ? T.R * 1.4 + Math.sin(t / 0.5 * Math.PI / 2) * T.R * 6 : Math.max(0, st.from * (1 - (t - 0.5) / fwd)); }
-    let sp = mode === "cpuaim" || (mode === "stroke" && cpu.stroke.d !== undefined && S.players[S.turn].type === "cpu") ? { x: cpu.d ? cpu.d.sx : 0, y: cpu.d ? cpu.d.sy : 0 } : { ...spin };
-    const cAng = mode === "stroke" ? cpu.stroke.d.angle : aim;
     let lim = null;
-    if (showCue) { lim = cueLimits(c, cAng, sp.y); if (mode === "aim") sp.y = lim.y; }
-    view.setCue(showCue, c, cAng, sp, gap, lim ? lim.elev : 0.07);
+    const stroking = mode === "aim" || mode === "cpuaim" || mode === "stroke";
+    let target = ADDR();
+    if (mode === "aim" && pulling) target = pullGap(pullP);
+    if (mode === "aim" && held) target = ADDR() + held.pos * BACK();
+    if (mode === "stroke") target = strokeGap(cpu.stroke);
+    // your finger drives the cue directly; when you let go it settles back to the ball
+    cueGap = cueGap == null || (mode !== "aim") || held || pulling ? target : cueGap + (target - cueGap) * Math.min(1, dt * 10);
+    if (stroking && c.on) {
+      let sp = mode === "cpuaim" || (mode === "stroke" && S.players[S.turn].type === "cpu") ? { x: cpu.d ? cpu.d.sx : 0, y: cpu.d ? cpu.d.sy : 0 } : { ...spin };
+      if (mode === "stroke") sp = { x: cpu.stroke.d.sx, y: cpu.stroke.d.sy };
+      const cAng = mode === "stroke" ? cpu.stroke.d.angle : aim;
+      lim = cueLimits(c, cAng, sp.y); if (mode === "aim") sp.y = lim.y;
+      view.setCue(true, c, cAng, sp, cueGap, lim.elev);
+    } else if (through && through.t < 0.75) {
+      // follow-through: drive on past the ball, hold, then the cue is drawn away
+      through.t += dt;
+      const t = through.t, reach = T.R * (1.2 + 7 * through.p);
+      const k = Math.min(1, t / (0.06 + 0.1 * (1 - through.p))), ease = 1 - (1 - k) * (1 - k);
+      const back = t > 0.45 ? (t - 0.45) / 0.3 : 0;
+      view.setCue(true, through, through.angle, through.spin, -reach * ease + back * back * T.R * 12, through.elev);
+    } else view.setCue(false);
     if (mode === "aim") showCushionLimit(lim);
     const hit = mode === "aim" ? guides() : (view.setGuides(null), null);
     $("inset").hidden = mode !== "aim" || !c.on || viewMode === "top";
@@ -586,11 +679,15 @@ function frame(now) {
     viewState.pitch = pitch; viewState.angle = mode === "run" ? follow.angle : (mode === "stroke" ? cpu.stroke.d.angle : aim);
     viewState.cue = mode === "run" ? { x: follow.eye.x + Math.cos(follow.angle) * (0.34 + pitch * 1.1), y: follow.eye.y + Math.sin(follow.angle) * (0.34 + pitch * 1.1) } : { x: c.x, y: c.y };
     viewState.track = follow && follow.track; viewState.eye = follow && follow.eye;
+    // ease the camera back with a long backswing so the cue stays in view
+    const drawT = mode === "aim" || mode === "stroke" ? Math.max(0, cueGap - ADDR()) * 0.8 : 0;
+    viewState.draw = (viewState.draw || 0) + (drawT - (viewState.draw || 0)) * Math.min(1, dt * 7);
     viewState.zoom = zoom[viewState.mode === "top" ? "top" : viewState.mode === "tv" ? "tv" : "aim"];
     view.sync(W, dt);
     view.updateCamera(viewState, dt);
     view.render();
     pullEl.classList.toggle("off", mode !== "aim");
+    if (mode !== "aim" && powerShow) { powerShow = 0; }
   }
   requestAnimationFrame(frame);
 }

@@ -596,7 +596,7 @@ export class View {
     } else {
       this.camera.fov = w < h ? 46 : 40;
       const p = v.pitch, ux = Math.cos(v.angle), uy = Math.sin(v.angle);
-      const z = v.zoom || 1, back = (0.34 + p * 1.1) * z, ahead = 1.05 - p * 0.55;
+      const z = v.zoom || 1, back = (0.34 + p * 1.1) * z + (v.mode === "follow" ? 0 : v.draw || 0), ahead = 1.05 - p * 0.55;
       let high = (0.12 + p * 1.15) * z;
       if (v.mode !== "follow" && this.cue.visible && this.cueElev > 0.09) high = Math.max(high, R + (back + 0.05) * Math.tan(this.cueElev) + 0.07);
       let eye = { x: v.cue.x - ux * back, y: v.cue.y - uy * back }, look = { x: v.cue.x + ux * ahead, y: v.cue.y + uy * ahead };

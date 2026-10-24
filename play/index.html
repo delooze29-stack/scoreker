@@ -103,9 +103,9 @@ button,input{font:inherit}
 @media (orientation:landscape) and (max-height:540px){ #spinBigPad{width:min(52vh,220px);height:min(52vh,220px)} .spinbig .card{gap:8px;padding:12px 14px} .spinbig .tips{display:none} }
 
 /* pull-back cue */
-.pull{position:absolute;right:calc(10px + var(--sr));top:calc(240px + var(--st));bottom:calc(14px + var(--sb));width:50px;display:flex;flex-direction:column;align-items:center;gap:6px;touch-action:none;cursor:ns-resize;z-index:3;border-radius:16px;padding:8px 0 8px;transition:opacity .2s}
+.pull{position:absolute;right:calc(10px + var(--sr));top:calc(240px + var(--st));bottom:calc(14px + var(--sb));width:58px;display:flex;flex-direction:column;align-items:center;gap:6px;touch-action:none;cursor:ns-resize;z-index:3;border-radius:16px;padding:8px 0 8px;transition:opacity .2s}
 .pull .plabel{font-size:9.5px;font-weight:700;letter-spacing:.16em;color:var(--muted)}
-.ptrack{position:relative;flex:1;width:26px;border-radius:13px;background:linear-gradient(90deg,rgba(0,0,0,.55),rgba(255,255,255,.05) 50%,rgba(0,0,0,.55));border:1px solid rgba(255,255,255,.12);overflow:hidden}
+.ptrack{position:relative;flex:1;width:30px;border-radius:13px;background:linear-gradient(90deg,rgba(0,0,0,.55),rgba(255,255,255,.05) 50%,rgba(0,0,0,.55));border:1px solid rgba(255,255,255,.12);overflow:hidden}
 .pfill{position:absolute;left:3px;right:3px;top:3px;height:0;border-radius:10px;background:linear-gradient(#5fd38a,#F5B700 55%,#ff5a4e);box-shadow:0 0 12px rgba(245,183,0,.5);opacity:.85}
 .ticks{position:absolute;inset:0;pointer-events:none}
 .ticks i{position:absolute;left:4px;right:4px;height:1px;background:rgba(255,255,255,.18)}
@@ -247,6 +247,7 @@ button,input{font:inherit}
       <div><div class="lab">Frames</div><div class="seg" id="framePick"></div></div>
       <div><div class="lab">Guides</div><div class="seg" id="guidePick"></div></div>
     </div>
+    <div><div class="lab">Cue <span style="text-transform:none;letter-spacing:0;font-weight:500">· Stroke it: hold the cue and push it through, the faster the harder</span></div><div class="seg" id="cuePick"></div></div>
     <div><div class="lab">Graphics <span style="text-transform:none;letter-spacing:0;font-weight:500">· Standard runs smoother on older phones</span></div><div class="seg" id="gfxPick"></div></div>
     <div class="row2"><button class="go" id="startBtn" type="button">Play</button><button class="ghostbtn" id="resumeBtn" type="button" hidden>Back to the table</button></div>
     <div class="links"><a href="../">← ScoreKer</a><a href="../practice/">Practice table</a></div>
