@@ -1,7 +1,7 @@
 {
   "weekId": "2026-10-24",
   "createdAt": "2026-10-23T07:44:33.583Z",
-  "updatedAt": "2026-10-25T16:45:58.674Z",
+  "updatedAt": "2026-10-25T19:40:26.639Z",
   "red": {
     "id": "d0202960708a442401d7fc7bd74a0183",
     "sport": "soccer_epl",
@@ -265,7 +265,7 @@
       "draw": 3.21,
       "away": 2.36
     },
-    "status": "LIVE",
+    "status": "FT",
     "result": [
       0,
       0
