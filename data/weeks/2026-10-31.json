@@ -1,7 +1,7 @@
 {
   "weekId": "2026-10-31",
   "createdAt": "2026-10-30T08:00:17.667Z",
-  "updatedAt": "2026-10-31T16:56:40.932Z",
+  "updatedAt": "2026-10-31T22:35:38.864Z",
   "red": {
     "id": "6601f69175a02f03fb7065aacb538e01",
     "sport": "soccer_epl",
@@ -150,8 +150,11 @@
         "draw": 4.39,
         "away": 5.55
       },
-      "status": "NS",
-      "result": null,
+      "status": "FT",
+      "result": [
+        2,
+        0
+      ],
       "colour": "yellow"
     },
     {
@@ -185,8 +188,11 @@
         "draw": 3.7,
         "away": 3.69
       },
-      "status": "NS",
-      "result": null,
+      "status": "FT",
+      "result": [
+        1,
+        1
+      ],
       "colour": "brown"
     },
     {
@@ -201,7 +207,7 @@
         "draw": 3.39,
         "away": 3.43
       },
-      "status": "LIVE",
+      "status": "FT",
       "result": [
         2,
         0
@@ -220,7 +226,7 @@
         "draw": 3.31,
         "away": 2.31
       },
-      "status": "LIVE",
+      "status": "FT",
       "result": [
         3,
         1
