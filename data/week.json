@@ -1,7 +1,7 @@
 {
   "weekId": "2026-10-31",
   "createdAt": "2026-10-30T08:00:17.667Z",
-  "updatedAt": "2026-10-31T22:35:38.864Z",
+  "updatedAt": "2026-11-01T16:50:02.815Z",
   "red": {
     "id": "6601f69175a02f03fb7065aacb538e01",
     "sport": "soccer_epl",
@@ -265,8 +265,11 @@
       "draw": 3.39,
       "away": 2.36
     },
-    "status": "NS",
-    "result": null
+    "status": "LIVE",
+    "result": [
+      0,
+      1
+    ]
   },
   "redKickoff": "2026-10-31T12:30:00Z",
   "freeLock": "2026-10-31T15:00:00.000Z",
