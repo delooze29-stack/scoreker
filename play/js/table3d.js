@@ -1,7 +1,7 @@
 // The table itself, built from the same outline the physics uses.
 // Physics (x, y) on the bed maps to three.js (x, height, -y).
 import { marks } from "./rules.js";
-import { canvasTex, clothTex, clothNormal, woodTex, radialTex } from "./tex.js";
+import { C, canvasTex, clothTex, clothNormal, woodTex, radialTex } from "./tex.js";
 
 const THREE = window.THREE;
 const V3 = (x, h, y) => new THREE.Vector3(x, h, -y);
@@ -142,7 +142,7 @@ export function buildTable3D(G, table, game, st, quality) {
   P.forEach(p => { const s = (p.drop.r + 0.03) * 2, m = new THREE.Mesh(new THREE.PlaneGeometry(s, s), aoMat); m.rotation.x = -Math.PI / 2; m.position.copy(V3(p.drop.x, 0.0011, p.drop.y)); m.renderOrder = 1; G.add(m); });
 
   // ---- markings
-  const markMat = new THREE.MeshBasicMaterial({ color: 0xf2f2ea, transparent: true, opacity: 0.42, depthWrite: false });
+  const markMat = new THREE.MeshBasicMaterial({ color: C(0xf2f2ea), transparent: true, opacity: 0.42, depthWrite: false });
   const mk = marks(game);
   const lineAt = x => { const l = new THREE.Mesh(new THREE.PlaneGeometry(0.0022, W), markMat); l.rotation.x = -Math.PI / 2; l.position.copy(V3(x, 0.0014, W / 2)); l.renderOrder = 2; G.add(l); };
   const spot = (x, y, r = 0.0035, c = 0x10140f, op = 0.8) => { const s = new THREE.Mesh(new THREE.CircleGeometry(r, 16), new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: op, depthWrite: false })); s.rotation.x = -Math.PI / 2; s.position.copy(V3(x, 0.0015, y)); s.renderOrder = 2; G.add(s); };
@@ -167,9 +167,9 @@ export function buildTable3D(G, table, game, st, quality) {
     if (p.kind === "middle") return { x: p.drop.x + p.o.x * 0.005, y: p.drop.y + p.o.y * 0.005, r: middleCut.r };
     const d = Math.hypot(cornerCut.x - P[0].drop.x, cornerCut.y - P[0].drop.y); return { x: p.drop.x + p.o.x * d, y: p.drop.y + p.o.y * d, r: cornerCut.r };
   };
-  const linerMat = new THREE.MeshStandardMaterial({ color: st.liner, roughness: st.linerRough, metalness: 0, envMapIntensity: 0.1, side: THREE.DoubleSide });
+  const linerMat = new THREE.MeshStandardMaterial({ color: C(st.liner), roughness: st.linerRough, metalness: 0, envMapIntensity: 0.1, side: THREE.DoubleSide });
   const fallMat = new THREE.MeshStandardMaterial({ color: 0xffffff, map: clothTex(new THREE.Color(st.cloth).multiplyScalar(0.55).getHex(), [1, 1]), roughness: 1, envMapIntensity: 0, side: THREE.DoubleSide });
-  const darkMat = new THREE.MeshBasicMaterial({ color: 0x020202, side: THREE.DoubleSide });
+  const darkMat = new THREE.MeshBasicMaterial({ color: C(0x020202), side: THREE.DoubleSide });
   P.forEach(p => {
     const c = V3(p.drop.x, 0, p.drop.y), hr = p.drop.r;
     const lm = new THREE.Mesh(linerGeo(p, cutFor(p), table, rh), linerMat); lm.castShadow = true; lm.receiveShadow = true; G.add(lm);
@@ -190,7 +190,7 @@ export function buildTable3D(G, table, game, st, quality) {
   };
   rail(0, 0, 0, L, true); rail(L, 0, Math.PI / 2, W, false); rail(L, W, Math.PI, L, true); rail(0, W, Math.PI * 1.5, W, false);
   if (st.diamonds) { // sights inlaid in the rails
-    const dm = new THREE.MeshStandardMaterial({ color: 0xf1ede0, roughness: 0.25, metalness: 0.1, envMapIntensity: 0.8 });
+    const dm = new THREE.MeshStandardMaterial({ color: C(0xf1ede0), roughness: 0.25, metalness: 0.1, envMapIntensity: 0.8 });
     const put = (x, y) => { const d = new THREE.Mesh(new THREE.CircleGeometry(0.0062, 20), dm); d.rotation.x = -Math.PI / 2; d.position.copy(V3(x, rh + 0.0003, y)); G.add(d); };
     for (let i = 1; i < 8; i++) if (i !== 4) { put(L * i / 8, -cw - rw * 0.5); put(L * i / 8, W + cw + rw * 0.5); }
     for (let i = 1; i < 4; i++) { put(-cw - rw * 0.5, W * i / 4); put(L + cw + rw * 0.5, W * i / 4); }
@@ -204,9 +204,9 @@ export function buildTable3D(G, table, game, st, quality) {
   if (st.body === "cabinet") { // a pub table: one deep cabinet on four stubby feet
     add(new THREE.BoxGeometry(fw - 0.012, 0.28, fd - 0.012), L / 2, -0.17, W / 2);
     add(new THREE.BoxGeometry(fw - 0.1, 0.2, fd - 0.1), L / 2, -0.4, W / 2);
-    const metal = new THREE.MeshStandardMaterial({ color: 0x9a9da3, roughness: 0.35, metalness: 0.9, envMapIntensity: 0.9 });
+    const metal = new THREE.MeshStandardMaterial({ color: C(0x9a9da3), roughness: 0.35, metalness: 0.9, envMapIntensity: 0.9 });
     add(new THREE.BoxGeometry(0.2, 0.11, 0.012), L * 0.72, -0.16, -ox + 0.004, metal); // coin slot
-    add(new THREE.BoxGeometry(0.34, 0.1, 0.012), L * 0.2, -0.2, -ox + 0.004, new THREE.MeshBasicMaterial({ color: 0x050505 })); // ball return
+    add(new THREE.BoxGeometry(0.34, 0.1, 0.012), L * 0.2, -0.2, -ox + 0.004, new THREE.MeshBasicMaterial({ color: C(0x050505) })); // ball return
     [[0.16, 0.14], [L - 0.16, 0.14], [0.16, W - 0.14], [L - 0.16, W - 0.14]].forEach(([x, y]) => add(new THREE.BoxGeometry(0.13, 0.36, 0.13), x, floorY + 0.18, y));
   } else {
     const deep = st.body === "snooker" ? 0.2 : 0.16;

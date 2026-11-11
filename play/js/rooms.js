@@ -1,6 +1,6 @@
 // The room round the table: a TV studio for snooker, a pub for UK pool, a tournament arena for US pool.
 // Kept dim so the lit table is the picture.
-import { canvasTex, carpetTex, boardsTex, woodTex } from "./tex.js";
+import { C, canvasTex, carpetTex, boardsTex, woodTex } from "./tex.js";
 
 const THREE = window.THREE;
 const V3 = (x, h, y) => new THREE.Vector3(x, h, -y);
@@ -21,7 +21,7 @@ function crowd(G, mx, my, bx, by, rows, lit) {
   const seatCols = [0x141a26, 0x241519, 0x181b20, 0x261d16, 0x15211b, 0x2a2a30, 0x101116, 0x331a1d, 0x1b2a3a];
   const person = new THREE.CylinderGeometry(0.21, 0.17, 0.52, 10), headG = new THREE.SphereGeometry(0.095, 10, 8), list = [];
   person.scale(1, 1, 0.62); headG.scale(0.92, 1.1, 1);
-  const tier = new THREE.MeshStandardMaterial({ color: 0x07080a, roughness: 0.95, envMapIntensity: 0 });
+  const tier = new THREE.MeshStandardMaterial({ color: C(0x07080a), roughness: 0.95, envMapIntensity: 0 });
   [[0, -1, bx * 2 + 3], [0, 1, bx * 2 + 3], [-1, 0, by * 2 + 3], [1, 0, by * 2 + 3]].forEach(([sx, sy, len]) => {
     for (let r = 0; r < rows; r++) {
       const dist = (sx ? bx : by) + 1.9 + r * 0.8, h = FLOOR + 0.3 + r * 0.42, span = len + 1.8 + r * 1.6;
@@ -39,37 +39,37 @@ function crowd(G, mx, my, bx, by, rows, lit) {
   const mtx = new THREE.Matrix4(), q = new THREE.Quaternion(), col = new THREE.Color(), one = new THREE.Vector3(1, 1, 1), up = new THREE.Vector3(0, 1, 0);
   list.forEach((p, i) => {
     q.setFromAxisAngle(up, p.ry);
-    mtx.compose(V3(p.x, p.h, p.y), q, one); im.setMatrixAt(i, mtx); im.setColorAt(i, col.setHex(p.c).multiplyScalar(lit));
-    mtx.compose(V3(p.x, p.h + 0.39, p.y), q, one); heads.setMatrixAt(i, mtx); heads.setColorAt(i, col.setHex(skin[i % skin.length]).multiplyScalar(lit * 0.8));
+    mtx.compose(V3(p.x, p.h, p.y), q, one); im.setMatrixAt(i, mtx); im.setColorAt(i, col.setHex(p.c).convertSRGBToLinear().multiplyScalar(lit * 3));
+    mtx.compose(V3(p.x, p.h + 0.39, p.y), q, one); heads.setMatrixAt(i, mtx); heads.setColorAt(i, col.setHex(skin[i % skin.length]).convertSRGBToLinear().multiplyScalar(lit * 0.45));
   });
   G.add(im, heads);
 }
 
 function hoarding(G, mx, my, dx, dy, tex, led, h = 0.7) { // advertising boards round the playing floor
-  const dark = new THREE.MeshStandardMaterial({ color: 0x08090c, roughness: 0.7 });
+  const dark = new THREE.MeshStandardMaterial({ color: C(0x08090c), roughness: 0.7 });
   sides(mx, my, dx, dy).forEach(([x, y, len, ry]) => {
     const t = tex.clone(); t.needsUpdate = true; t.wrapS = THREE.RepeatWrapping; t.repeat.set(Math.max(1, Math.round(len / (h * 9))), 1);
     const face = new THREE.MeshStandardMaterial({ map: t, emissive: 0xffffff, emissiveMap: t, emissiveIntensity: 0.3, roughness: 0.6 });
     const b = new THREE.Mesh(new THREE.BoxGeometry(len + 0.08, h, 0.08), [dark, dark, dark, dark, face, dark]);
     b.position.copy(V3(x, FLOOR + h / 2, y)); b.rotation.y = ry; b.receiveShadow = true; G.add(b);
-    if (led != null) { const l = new THREE.Mesh(new THREE.BoxGeometry(len + 0.08, 0.018, 0.085), new THREE.MeshBasicMaterial({ color: led })); l.position.copy(V3(x, FLOOR + h + 0.009, y)); l.rotation.y = ry; G.add(l); }
+    if (led != null) { const l = new THREE.Mesh(new THREE.BoxGeometry(len + 0.08, 0.018, 0.085), new THREE.MeshBasicMaterial({ color: C(led) })); l.position.copy(V3(x, FLOOR + h + 0.009, y)); l.rotation.y = ry; G.add(l); }
   });
 }
 
 function tvCamera() {
-  const metal = new THREE.MeshStandardMaterial({ color: 0x23262b, roughness: 0.45, metalness: 0.6 });
+  const metal = new THREE.MeshStandardMaterial({ color: C(0x23262b), roughness: 0.45, metalness: 0.6 });
   const cam = new THREE.Group();
   for (let i = 0; i < 3; i++) {
     const a = i / 3 * Math.PI * 2, leg = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.012, 1.25, 8), metal);
     leg.position.set(Math.cos(a) * 0.22, 0.55, Math.sin(a) * 0.22); leg.rotation.set(Math.sin(a) * 0.35, 0, -Math.cos(a) * 0.35); cam.add(leg);
   }
   const col = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.35, 10), metal); col.position.y = 1.25; cam.add(col);
-  const body = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.26, 0.24), new THREE.MeshStandardMaterial({ color: 0x15171b, roughness: 0.5, metalness: 0.3 })); body.position.set(0.05, 1.5, 0); cam.add(body);
-  const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.1, 0.38, 20), new THREE.MeshStandardMaterial({ color: 0x0b0c0e, roughness: 0.3, metalness: 0.5 }));
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.26, 0.24), new THREE.MeshStandardMaterial({ color: C(0x15171b), roughness: 0.5, metalness: 0.3 })); body.position.set(0.05, 1.5, 0); cam.add(body);
+  const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.1, 0.38, 20), new THREE.MeshStandardMaterial({ color: C(0x0b0c0e), roughness: 0.3, metalness: 0.5 }));
   lens.rotation.z = Math.PI / 2; lens.position.set(0.48, 1.5, 0); cam.add(lens);
-  const glass = new THREE.Mesh(new THREE.CircleGeometry(0.075, 20), new THREE.MeshStandardMaterial({ color: 0x223355, roughness: 0.05, metalness: 0.9 })); glass.rotation.y = Math.PI / 2; glass.position.set(0.672, 1.5, 0); cam.add(glass);
+  const glass = new THREE.Mesh(new THREE.CircleGeometry(0.075, 20), new THREE.MeshStandardMaterial({ color: C(0x223355), roughness: 0.05, metalness: 0.9 })); glass.rotation.y = Math.PI / 2; glass.position.set(0.672, 1.5, 0); cam.add(glass);
   const vf = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.12, 0.12), metal); vf.position.set(-0.2, 1.68, 0.05); cam.add(vf);
-  const tally = new THREE.Mesh(new THREE.SphereGeometry(0.014, 8, 6), new THREE.MeshBasicMaterial({ color: 0xff2a1a })); tally.position.set(0.28, 1.65, 0); cam.add(tally);
+  const tally = new THREE.Mesh(new THREE.SphereGeometry(0.014, 8, 6), new THREE.MeshBasicMaterial({ color: C(0xff2a1a) })); tally.position.set(0.28, 1.65, 0); cam.add(tally);
   cam.traverse(o => { if (o.isMesh) o.castShadow = true; });
   return cam;
 }
@@ -86,11 +86,11 @@ function studio(G, L, W) {
     [[w * 0.25, "SCOREKER", "#ffffff"], [w * 0.75, "CUE CLUB", "#f2b71f"]].forEach(([x, t, c]) => { g.font = "bold 132px 'Bebas Neue', Impact, sans-serif"; g.fillStyle = c; g.fillText(t, x, h * 0.46, w * 0.4); });
   });
   hoarding(G, mx, my, dx, dy, ad, 0xf2b71f, 0.8);
-  crowd(G, mx, my, dx, dy, 6, 0.3);
+  crowd(G, mx, my, dx, dy, 6, 0.75);
   // the set behind the crowd: dark drapes with tall warm light boxes
-  const drape = new THREE.MeshStandardMaterial({ color: 0x0a1226, roughness: 1, envMapIntensity: 0 });
+  const drape = new THREE.MeshStandardMaterial({ color: C(0x0a1226), roughness: 1, envMapIntensity: 0 });
   const boxTex = canvasTex(64, 256, (g, w, h) => { const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, "#5c3d00"); gr.addColorStop(0.5, "#f2b71f"); gr.addColorStop(1, "#7a5200"); g.fillStyle = gr; g.fillRect(0, 0, w, h); });
-  const boxMat = new THREE.MeshBasicMaterial({ map: boxTex, color: 0x9a9a9a });
+  const boxMat = new THREE.MeshBasicMaterial({ map: boxTex, color: C(0xcfcfcf) });
   sides(mx, my, dx + 7.2, dy + 7.2).forEach(side => {
     const [x, y, len, ry] = side;
     panel(G, x, y, FLOOR, len + 14, 8, ry, drape);
@@ -120,7 +120,7 @@ function pub(G, L, W) {
   const walls = sides(mx, my, dx, dy);
   const glow = canvasTex(128, 128, (g, w, h) => { const gr = g.createRadialGradient(w / 2, h * 0.6, 0, w / 2, h * 0.6, w / 2); gr.addColorStop(0, "rgba(255,196,120,.85)"); gr.addColorStop(0.4, "rgba(255,160,80,.25)"); gr.addColorStop(1, "rgba(255,150,60,0)"); g.fillStyle = gr; g.fillRect(0, 0, w, h); });
   const glowMat = new THREE.MeshBasicMaterial({ map: glow, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
-  const brass = new THREE.MeshStandardMaterial({ color: 0x9a7a3a, roughness: 0.35, metalness: 0.9 }), shadeMat = new THREE.MeshBasicMaterial({ color: 0xffd9a0, side: THREE.DoubleSide });
+  const brass = new THREE.MeshStandardMaterial({ color: C(0x9a7a3a), roughness: 0.35, metalness: 0.9 }), shadeMat = new THREE.MeshBasicMaterial({ color: C(0xffd9a0), side: THREE.DoubleSide });
   walls.forEach((side, i) => {
     const [x, y, len, ry] = side;
     const t = wall.clone(); t.needsUpdate = true; t.wrapS = THREE.RepeatWrapping; t.repeat.set(len / 3, 1);
@@ -134,9 +134,9 @@ function pub(G, L, W) {
       const arm = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, 0.12), brass); arm.position.copy(V3(a0.x, FLOOR + 1.86, a0.y)); arm.rotation.y = ry; G.add(arm);
     }
   });
-  const ceil = new THREE.Mesh(new THREE.PlaneGeometry(2 * dx, 2 * dy), new THREE.MeshStandardMaterial({ color: 0x1c1512, roughness: 1, envMapIntensity: 0 })); ceil.rotation.x = Math.PI / 2; ceil.position.copy(V3(mx, FLOOR + hgt, my)); G.add(ceil);
+  const ceil = new THREE.Mesh(new THREE.PlaneGeometry(2 * dx, 2 * dy), new THREE.MeshStandardMaterial({ color: C(0x1c1512), roughness: 1, envMapIntensity: 0 })); ceil.rotation.x = Math.PI / 2; ceil.position.copy(V3(mx, FLOOR + hgt, my)); G.add(ceil);
   // framed pictures and a dartboard
-  const frameMat = new THREE.MeshStandardMaterial({ color: 0x4a3018, roughness: 0.5 });
+  const frameMat = new THREE.MeshStandardMaterial({ color: C(0x4a3018), roughness: 0.5 });
   const pic = (wi, k, w, h, col) => {
     const side = walls[wi], ry = side[3], a = onWall(side, k, 0.016), b2 = onWall(side, k, 0.033);
     const f = new THREE.Mesh(new THREE.BoxGeometry(w + 0.08, h + 0.08, 0.03), frameMat); f.position.copy(V3(a.x, FLOOR + 1.75, a.y)); f.rotation.y = ry; G.add(f);
@@ -160,17 +160,17 @@ function pub(G, L, W) {
     for (let x = 8; x < w - 8; x += 15) { const bh = 44 + (x * 7 % 30); g.fillStyle = cols[(x * 13) % cols.length]; g.fillRect(x, h - bh - 6, 9, bh); g.fillRect(x + 3, h - bh - 18, 3, 12); }
     g.fillStyle = "#170d08"; g.fillRect(0, h - 6, w, 6);
   });
-  const sh = new THREE.Mesh(new THREE.PlaneGeometry(2 * dy - 2, 0.55), new THREE.MeshBasicMaterial({ map: shelf, color: 0xb0b0b0 })); sh.position.copy(V3(mx + dx - 0.03, FLOOR + 1.62, my + 0.2)); sh.rotation.y = -Math.PI / 2; G.add(sh);
+  const sh = new THREE.Mesh(new THREE.PlaneGeometry(2 * dy - 2, 0.55), new THREE.MeshBasicMaterial({ map: shelf, color: C(0xb0b0b0) })); sh.position.copy(V3(mx + dx - 0.03, FLOOR + 1.62, my + 0.2)); sh.rotation.y = -Math.PI / 2; G.add(sh);
   for (let i = 0; i < 4; i++) { // stools
-    const y = my - 1.4 + i * 0.95, seat = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.06, 18), new THREE.MeshStandardMaterial({ color: 0x2e0c0a, roughness: 0.55 })); seat.position.copy(V3(mx + dx - 1.75, FLOOR + 0.76, y)); seat.castShadow = true; G.add(seat);
-    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.74, 8), new THREE.MeshStandardMaterial({ color: 0x8a8d92, roughness: 0.3, metalness: 0.9 })); post.position.copy(V3(mx + dx - 1.75, FLOOR + 0.37, y)); G.add(post);
+    const y = my - 1.4 + i * 0.95, seat = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.06, 18), new THREE.MeshStandardMaterial({ color: C(0x2e0c0a), roughness: 0.55 })); seat.position.copy(V3(mx + dx - 1.75, FLOOR + 0.76, y)); seat.castShadow = true; G.add(seat);
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.74, 8), new THREE.MeshStandardMaterial({ color: C(0x8a8d92), roughness: 0.3, metalness: 0.9 })); post.position.copy(V3(mx + dx - 1.75, FLOOR + 0.37, y)); G.add(post);
     const foot = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.18, 0.03, 18), post.material); foot.position.copy(V3(mx + dx - 1.75, FLOOR + 0.015, y)); G.add(foot);
   }
   // a cue rack on the wall
-  const rackM = new THREE.MeshStandardMaterial({ color: 0x2a180d, roughness: 0.5 });
+  const rackM = new THREE.MeshStandardMaterial({ color: C(0x2a180d), roughness: 0.5 });
   const rk = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.07, 0.06), rackM); rk.position.copy(V3(mx - 1.6, FLOOR + 1.5, my - dy + 0.04)); G.add(rk);
   const rk2 = rk.clone(); rk2.position.y = FLOOR + 0.45; G.add(rk2);
-  for (let i = 0; i < 4; i++) { const c = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.014, 1.45, 8), new THREE.MeshStandardMaterial({ color: i % 2 ? 0xc9a268 : 0xb58a52, roughness: 0.45 })); c.position.copy(V3(mx - 1.85 + i * 0.17, FLOOR + 1.12, my - dy + 0.09)); G.add(c); }
+  for (let i = 0; i < 4; i++) { const c = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.014, 1.45, 8), new THREE.MeshStandardMaterial({ color: C(i % 2 ? 0xc9a268 : 0xb58a52), roughness: 0.45 })); c.position.copy(V3(mx - 1.85 + i * 0.17, FLOOR + 1.12, my - dy + 0.09)); G.add(c); }
   return { bg: 0x0b0705, fog: [9, 26], hemi: [0xffe2c0, 0x1a100a, 0.3], fill: [0xffb070, 0.5, 2.3] };
 }
 
@@ -184,12 +184,12 @@ function arena(G, L, W) {
     g.font = "bold 150px 'Bebas Neue', Impact, sans-serif"; g.textBaseline = "middle"; g.textAlign = "center"; g.fillStyle = "rgba(255,255,255,.9)";
     g.font = "bold 132px 'Bebas Neue', Impact, sans-serif"; [[w * 0.25, "SCOREKER"], [w * 0.75, "CUE CLUB"]].forEach(([x, t]) => g.fillText(t, x, h * 0.52, w * 0.4));
   });
-  hoarding(G, mx, my, dx, dy, ad, 0x7a0c10, 0.7);
-  crowd(G, mx, my, dx, dy, 7, 0.26);
-  const wallMat = new THREE.MeshStandardMaterial({ color: 0x07090c, roughness: 1, envMapIntensity: 0 });
+  hoarding(G, mx, my, dx, dy, ad, 0xd01c22, 0.7);
+  crowd(G, mx, my, dx, dy, 7, 0.65);
+  const wallMat = new THREE.MeshStandardMaterial({ color: C(0x07090c), roughness: 1, envMapIntensity: 0 });
   sides(mx, my, dx + 7.4, dy + 7.4).forEach(([x, y, len, ry]) => panel(G, x, y, FLOOR, len + 16, 9, ry, wallMat));
   // lighting truss high over the floor with small lamps
-  const truss = new THREE.MeshStandardMaterial({ color: 0x1a1c20, roughness: 0.5, metalness: 0.7 }), lamp = new THREE.MeshBasicMaterial({ color: 0xcfd8ff });
+  const truss = new THREE.MeshStandardMaterial({ color: C(0x1a1c20), roughness: 0.5, metalness: 0.7 }), lamp = new THREE.MeshBasicMaterial({ color: C(0xcfd8ff) });
   [[-1, 0], [1, 0]].forEach(([s]) => {
     const bar = new THREE.Mesh(new THREE.BoxGeometry(2 * dx + 2, 0.12, 0.12), truss); bar.position.copy(V3(mx, 3.6, my + s * (dy + 0.6))); G.add(bar);
     for (let i = -3; i <= 3; i++) { const b = new THREE.Mesh(new THREE.SphereGeometry(0.045, 8, 6), lamp); b.position.copy(V3(mx + i * (dx / 3.2), 3.5, my + s * (dy + 0.6))); G.add(b); }
@@ -201,15 +201,15 @@ export function buildRoom(G, env, L, W) { return env === "studio" ? studio(G, L,
 
 // What the balls reflect: the long lamp over the table, and a hint of the room.
 export function envScene(env, L, W) {
-  const s = new THREE.Scene(); s.background = new THREE.Color(env === "studio" ? 0x0a0f1c : env === "pub" ? 0x140c07 : 0x07080b);
+  const s = new THREE.Scene(); s.background = C(env === "studio" ? 0x1a2030 : env === "pub" ? 0x24170e : 0x15171c);
   const lampCol = env === "pub" ? 0xffe2b8 : 0xfff6e6;
   const n = L > 3 ? 3 : 2, len = L * 0.8 / n;
   for (let i = 0; i < n; i++) {
-    const p = new THREE.Mesh(new THREE.PlaneGeometry(len * 0.86, W * 0.3), new THREE.MeshBasicMaterial({ color: lampCol })); p.rotation.x = Math.PI / 2;
+    const p = new THREE.Mesh(new THREE.PlaneGeometry(len * 0.86, W * 0.3), new THREE.MeshBasicMaterial({ color: C(lampCol) })); p.rotation.x = Math.PI / 2;
     p.position.set((i + 0.5 - n / 2) * len, 1.25, 0); s.add(p);
   }
   const band = env === "studio" ? 0x2a2a34 : env === "pub" ? 0x3a2414 : 0x2a1416;
-  [[0, -7, 0], [0, 7, Math.PI], [-7, 0, Math.PI / 2], [7, 0, -Math.PI / 2]].forEach(([x, z, ry]) => { const b = new THREE.Mesh(new THREE.PlaneGeometry(22, 1.2), new THREE.MeshBasicMaterial({ color: band })); b.position.set(x, 0.4, z); b.rotation.y = ry; s.add(b); });
-  const f = new THREE.Mesh(new THREE.PlaneGeometry(22, 22), new THREE.MeshBasicMaterial({ color: env === "studio" ? 0x12301c : env === "pub" ? 0x10301c : 0x0c2440 })); f.rotation.x = -Math.PI / 2; f.position.y = -0.6; s.add(f);
+  [[0, -7, 0], [0, 7, Math.PI], [-7, 0, Math.PI / 2], [7, 0, -Math.PI / 2]].forEach(([x, z, ry]) => { const b = new THREE.Mesh(new THREE.PlaneGeometry(22, 1.2), new THREE.MeshBasicMaterial({ color: C(band) })); b.position.set(x, 0.4, z); b.rotation.y = ry; s.add(b); });
+  const f = new THREE.Mesh(new THREE.PlaneGeometry(22, 22), new THREE.MeshBasicMaterial({ color: C(env === "studio" ? 0x1a5a30 : env === "pub" ? 0x185a34 : 0x16467a) })); f.rotation.x = -Math.PI / 2; f.position.y = -0.6; s.add(f);
   return s;
 }

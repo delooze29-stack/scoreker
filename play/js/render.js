@@ -1,6 +1,6 @@
 // 3D view. Physics (x, y) on the table maps to three.js (x, height, -y).
 import { defs as defsList } from "./rules.js";
-import { canvasTex, ballTex, woodTex, radialTex } from "./tex.js";
+import { C, canvasTex, ballTex, woodTex, radialTex } from "./tex.js";
 import { buildTable3D } from "./table3d.js";
 import { buildRoom, envScene } from "./rooms.js";
 
@@ -96,7 +96,7 @@ export class View {
     const dims = buildTable3D(G, table, game, style, this.quality);
     this.rh = dims.rh; this.ch = dims.ch;
     const room = buildRoom(G, style.env, L, W);
-    this.scene.background = new THREE.Color(room.bg); this.scene.fog = new THREE.Fog(room.bg, room.fog[0], room.fog[1]);
+    this.scene.background = C(room.bg); this.scene.fog = new THREE.Fog(C(room.bg), room.fog[0], room.fog[1]);
     this.exposure = style.exposure || 1; this.renderer.toneMappingExposure = this.exposure;
 
     // Light: one long lamp over the table. A shadow-casting key from straight above, soft pools
@@ -113,9 +113,9 @@ export class View {
     }
     const fill = new THREE.PointLight(room.fill[0], room.fill[1], 18, 1.4); fill.position.copy(V3(L / 2, room.fill[2], W / 2)); G.add(fill);
     // the lamp itself (hidden when it would get in the way of the camera)
-    const shade = new THREE.Mesh(new THREE.BoxGeometry(L * 0.86, 0.1, W * 0.6), new THREE.MeshStandardMaterial({ color: 0x101214, roughness: 0.4, metalness: 0.5 }));
+    const shade = new THREE.Mesh(new THREE.BoxGeometry(L * 0.86, 0.1, W * 0.6), new THREE.MeshStandardMaterial({ color: C(0x101214), roughness: 0.4, metalness: 0.5 }));
     shade.position.copy(V3(L / 2, 1.62, W / 2)); G.add(shade);
-    const glow = new THREE.Mesh(new THREE.PlaneGeometry(L * 0.82, W * 0.54), new THREE.MeshBasicMaterial({ color: 0xfff3df }));
+    const glow = new THREE.Mesh(new THREE.PlaneGeometry(L * 0.82, W * 0.54), new THREE.MeshBasicMaterial({ color: C(0xfff3df) }));
     glow.rotation.x = Math.PI / 2; glow.position.copy(V3(L / 2, 1.568, W / 2)); G.add(glow);
     this.canopy = [shade, glow];
 
@@ -149,14 +149,14 @@ export class View {
     const grainB = woodTex(snooker ? 0x1c120c : 0x24160e, { figure: 0.5, rep: [1, 3] }); grainB.rotation = Math.PI / 2;
     const shaft = new THREE.MeshPhysicalMaterial({ color: 0xffffff, map: grainS, roughness: 0.38, clearcoat: 0.5, clearcoatRoughness: 0.2, envMapIntensity: 0.4 });
     const butt = new THREE.MeshPhysicalMaterial({ color: 0xffffff, map: grainB, roughness: 0.3, clearcoat: 0.9, clearcoatRoughness: 0.1, envMapIntensity: 0.5 });
-    const brass = new THREE.MeshStandardMaterial({ color: 0xc9a24a, roughness: 0.25, metalness: 1, envMapIntensity: 1 });
+    const brass = new THREE.MeshStandardMaterial({ color: C(0xc9a24a), roughness: 0.25, metalness: 1, envMapIntensity: 1 });
     const tipR = snooker ? 0.0048 : 0.0064, t2 = tipR + 0.0002, jointR = snooker ? 0.0105 : 0.0112, buttR = snooker ? 0.0146 : 0.0152;
-    part(tipR * 0.92, tipR, 0.007, -0.0035, new THREE.MeshStandardMaterial({ color: 0x2c5c8a, roughness: 1 }));
-    part(tipR, t2, 0.012, -0.013, snooker ? brass : new THREE.MeshStandardMaterial({ color: 0xf1ede0, roughness: 0.3 }));
+    part(tipR * 0.92, tipR, 0.007, -0.0035, new THREE.MeshStandardMaterial({ color: C(0x2c5c8a), roughness: 1 }));
+    part(tipR, t2, 0.012, -0.013, snooker ? brass : new THREE.MeshStandardMaterial({ color: C(0xf1ede0), roughness: 0.3 }));
     part(t2, jointR, len * 0.55, -0.019 - len * 0.275, shaft);
     part(jointR + 0.0002, jointR + 0.0004, 0.022, -0.019 - len * 0.55 - 0.011, brass);
     part(jointR + 0.0004, buttR, len * 0.42, -0.041 - len * 0.55 - len * 0.21, butt);
-    part(buttR, buttR * 0.96, 0.014, -0.041 - len * 0.97 - 0.007, new THREE.MeshStandardMaterial({ color: 0x0c0c0c, roughness: 0.6 }));
+    part(buttR, buttR * 0.96, 0.014, -0.041 - len * 0.97 - 0.007, new THREE.MeshStandardMaterial({ color: C(0x0c0c0c), roughness: 0.6 }));
     const inner = new THREE.Group(); inner.add(g); g.rotation.x = -Math.PI / 2;
     this.cue = new THREE.Group(); this.cue.add(inner); this.cueInner = g; this.group.add(this.cue); this.cue.visible = false;
   }
@@ -276,7 +276,7 @@ export class View {
   showZone(z) {
     if (this.zoneMesh) { this.group.remove(this.zoneMesh); this.zoneMesh = null; }
     if (!z) return;
-    const { L, W, R } = this.table, mat = new THREE.MeshBasicMaterial({ color: 0x7fb8e6, transparent: true, opacity: .16, depthWrite: false });
+    const { L, W, R } = this.table, mat = new THREE.MeshBasicMaterial({ color: C(0x7fb8e6), transparent: true, opacity: .16, depthWrite: false });
     let geo;
     if (z.type === "D") geo = new THREE.CircleGeometry(z.r, 48, Math.PI / 2, Math.PI);
     else if (z.type === "baulk") geo = new THREE.PlaneGeometry(z.x, W);
@@ -305,7 +305,8 @@ export class View {
     if (v.mode === "tv") { // high broadcast view from behind the baulk end
       const portrait = w < h; this.camera.fov = portrait ? 50 : 44; this.camera.clearViewOffset();
       const z = v.zoom || 1, back = (portrait ? 0.9 + L * 0.42 : 0.8 + L * 0.36) * z, hgt = (portrait ? 1.2 + L * 0.42 : 1.25 + L * 0.42) * z;
-      this.camTo(V3(-back, hgt, W / 2), V3(L * (portrait ? 0.58 : 0.5), 0, W / 2), new THREE.Vector3(0, 1, 0), 3, dt, snap);
+      const far = v.tvEnd === 1, lx = portrait ? 0.58 : 0.5; // from behind either end, whichever is nearer the shot
+      this.camTo(V3(far ? L + back : -back, hgt, W / 2), V3(L * (far ? 1 - lx : lx), 0, W / 2), new THREE.Vector3(0, 1, 0), 2.6, dt, snap);
     } else if (v.mode === "top") {
       this.camera.fov = 40; this.camera.clearViewOffset();
       const aspect = w / h, vert = aspect < 1, tv = Math.tan(20 * Math.PI / 180);

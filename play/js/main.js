@@ -8,10 +8,10 @@ const $ = id => document.getElementById(id);
 const D2R = Math.PI / 180;
 
 const STYLES = {
-  snooker: { env: "studio", cloth: 0x157a35, wood: 0x4a1f0d, figure: 1, railWidth: 0.13, railRough: 0.34, lacquer: 0.55, liner: 0x100906, linerRough: 0.6, body: "snooker", diamonds: false, exposure: 1 },
-  uk:      { env: "pub", cloth: 0x17703f, wood: 0x4a2a15, figure: 0.9, railWidth: 0.09, railRough: 0.4, lacquer: 0.45, liner: 0x0c0c0c, linerRough: 0.42, body: "cabinet", diamonds: false, exposure: 1 },
-  nine:    { env: "arena", cloth: 0x1a6fb4, wood: 0x17130f, figure: 0.4, railWidth: 0.11, railRough: 0.3, lacquer: 0.7, liner: 0x0b0b0c, linerRough: 0.4, body: "pedestal", diamonds: true, exposure: 1 },
-  us:      { env: "arena", cloth: 0x1a6fb4, wood: 0x17130f, figure: 0.4, railWidth: 0.11, railRough: 0.3, lacquer: 0.7, liner: 0x0b0b0c, linerRough: 0.4, body: "pedestal", diamonds: true, exposure: 1 },
+  snooker: { env: "studio", cloth: 0x157a35, wood: 0x4a1f0d, figure: 1, railWidth: 0.13, railRough: 0.34, lacquer: 0.55, liner: 0x2c1b10, linerRough: 0.6, body: "snooker", diamonds: false, exposure: 1 },
+  uk:      { env: "pub", cloth: 0x17703f, wood: 0x4a2a15, figure: 0.9, railWidth: 0.09, railRough: 0.4, lacquer: 0.45, liner: 0x1b1b1d, linerRough: 0.42, body: "cabinet", diamonds: false, exposure: 1 },
+  nine:    { env: "arena", cloth: 0x1a6fb4, wood: 0x17130f, figure: 0.4, railWidth: 0.11, railRough: 0.3, lacquer: 0.7, liner: 0x1a1a1c, linerRough: 0.4, body: "pedestal", diamonds: true, exposure: 1 },
+  us:      { env: "arena", cloth: 0x1a6fb4, wood: 0x17130f, figure: 0.4, railWidth: 0.11, railRough: 0.3, lacquer: 0.7, liner: 0x1a1a1c, linerRough: 0.4, body: "pedestal", diamonds: true, exposure: 1 },
 };
 const GAMES = [
   { id: "snooker", name: "Snooker", note: "12ft table, 15 reds", cloth: "#27a83a", wood: "#6a3416", balls: ["#b3121c", "#b3121c", "#f08cb4", "#111"] },
@@ -639,7 +639,7 @@ function frame(now) {
       follow.track = { x: tp.x, y: tp.y };
       follow.t = (follow.t || 0) + dt;
       if (firstHit && follow.hitT == null) follow.hitT = follow.t;
-      if (!follow.high && follow.t > (follow.hitT != null ? follow.hitT + 0.45 : 1.3)) follow.high = true;
+      if (!follow.high && follow.t > (follow.hitT != null ? follow.hitT + 0.45 : 1.3)) { follow.high = true; viewState.tvEnd = follow.eye.x > T.L / 2 ? 1 : 0; }
       if (!W.moving() && !view.potAnimating()) endShot();
       if (!W.moving()) Snd.roll(0);
     } else if (mode === "between") {
@@ -675,6 +675,7 @@ function frame(now) {
     if (!$("inset").hidden) drawOverlap(hit);
     // camera
     const cpuTurn = S.players[S.turn].type === "cpu" && mode !== "between";
+    if (cpuTurn && mode === "think") viewState.tvEnd = 0;
     viewState.mode = mode === "place" ? "top" : viewMode === "top" ? "top" : cpuTurn && (mode === "think" || mode === "cpuaim" || mode === "stroke" || mode === "run") ? "tv" : mode === "run" ? (follow.high ? "tv" : "follow") : viewMode;
     viewState.pitch = pitch; viewState.angle = mode === "run" ? follow.angle : (mode === "stroke" ? cpu.stroke.d.angle : aim);
     viewState.cue = mode === "run" ? { x: follow.eye.x + Math.cos(follow.angle) * (0.34 + pitch * 1.1), y: follow.eye.y + Math.sin(follow.angle) * (0.34 + pitch * 1.1) } : { x: c.x, y: c.y };

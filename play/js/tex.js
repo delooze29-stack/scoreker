@@ -7,6 +7,8 @@ export function canvasTex(w, h, draw, rep) {
   if (rep) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rep[0], rep[1]); }
   return t;
 }
+// three.js r128 takes material colours as linear light; write them as ordinary screen colours and convert here
+export const C = c => new THREE.Color(c).convertSRGBToLinear();
 export const hex = c => "#" + new THREE.Color(c).getHexString();
 const rnd = (() => { let s = 12345; return () => (s = (s * 16807) % 2147483647) / 2147483647; })(); // repeatable
 
