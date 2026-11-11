@@ -8,10 +8,10 @@ const $ = id => document.getElementById(id);
 const D2R = Math.PI / 180;
 
 const STYLES = {
-  snooker: { env: "studio", crowd: false, cloth: 0x119a25, wood: 0x6a3416, railWidth: 0.12, railRough: .32, plate: 0x2a170c, plateRough: .5, plateMetal: .05, diamonds: false },
-  uk:      { env: "pub", crowd: false, cloth: 0x1d6e3c, wood: 0x3a2213, railWidth: 0.09, railRough: .42, plate: 0x0d0d0d, plateRough: .35, plateMetal: .15, diamonds: false },
-  nine:    { env: "arena", crowd: true, cloth: 0x1673b8, wood: 0x0b0a09, railWidth: 0.11, railRough: .3, plate: 0x0b0b0b, plateRough: .4, plateMetal: .1, diamonds: true },
-  us:      { env: "arena", crowd: true, cloth: 0x1673b8, wood: 0x0b0a09, railWidth: 0.11, railRough: .3, plate: 0x0b0b0b, plateRough: .4, plateMetal: .1, diamonds: true },
+  snooker: { env: "studio", cloth: 0x157a35, wood: 0x4a1f0d, figure: 1, railWidth: 0.13, railRough: 0.34, lacquer: 0.55, liner: 0x100906, linerRough: 0.6, body: "snooker", diamonds: false, exposure: 1 },
+  uk:      { env: "pub", cloth: 0x17703f, wood: 0x4a2a15, figure: 0.9, railWidth: 0.09, railRough: 0.4, lacquer: 0.45, liner: 0x0c0c0c, linerRough: 0.42, body: "cabinet", diamonds: false, exposure: 1 },
+  nine:    { env: "arena", cloth: 0x1a6fb4, wood: 0x17130f, figure: 0.4, railWidth: 0.11, railRough: 0.3, lacquer: 0.7, liner: 0x0b0b0c, linerRough: 0.4, body: "pedestal", diamonds: true, exposure: 1 },
+  us:      { env: "arena", cloth: 0x1a6fb4, wood: 0x17130f, figure: 0.4, railWidth: 0.11, railRough: 0.3, lacquer: 0.7, liner: 0x0b0b0c, linerRough: 0.4, body: "pedestal", diamonds: true, exposure: 1 },
 };
 const GAMES = [
   { id: "snooker", name: "Snooker", note: "12ft table, 15 reds", cloth: "#27a83a", wood: "#6a3416", balls: ["#b3121c", "#b3121c", "#f08cb4", "#111"] },
@@ -240,7 +240,7 @@ function cueLimits(c, angle, sy) {
     const b = by > 0 ? (T.W + m - sy0) / by : by < 0 ? (-m - sy0) / by : Infinity;
     return Math.max(0.002, Math.min(a, b));
   };
-  const dC = exitAt(0), dR = exitAt(T.cw), Hc = R * 1.4 + 0.007, Hr = (view.rh || R * 1.4) + 0.01;
+  const dC = exitAt(0), dR = exitAt(T.cw), Hc = (view.ch || R * 1.4) + 0.006, Hr = (view.rh || R * 1.4) + 0.012;
   const hMin = Math.max(Hc - dC * Math.tan(EMAX), Hr - dR * Math.tan(EMAX));
   const minY = Math.min(0.85, (hMin - R) / (0.5 * R));
   const y = Math.max(sy, minY), tipH = R + y * 0.5 * R;
@@ -705,4 +705,4 @@ try {
 } catch (e) { console.error(e); $("menu").querySelector("p").textContent = "Your browser couldn't start the 3D table."; }
 hud();
 requestAnimationFrame(frame);
-window.__game = { zoom, pull: p => shoot(p), get S() { return S; }, get W() { return W; }, get mode() { return mode; }, set aim(a) { aim = a; }, get aim() { return aim; }, set pitch(p) { pitch = p; }, shoot, cfg, endFrame: () => { S.over = { winner: 0, text: 'Test frame over.' }; nextTurn(); }, renderInfo: () => view.renderer.info.render };
+window.__game = { get view() { return view; }, get T() { return T; }, zoom, pull: p => shoot(p), get S() { return S; }, get W() { return W; }, get mode() { return mode; }, set aim(a) { aim = a; }, get aim() { return aim; }, set pitch(p) { pitch = p; }, shoot, cfg, endFrame: () => { S.over = { winner: 0, text: 'Test frame over.' }; nextTurn(); }, renderInfo: () => view.renderer.info.render };

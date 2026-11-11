@@ -12,26 +12,30 @@ export const SPECS = {
     name: "Snooker", L: 3.569, W: 1.778, R: 0.02625, cw: 0.05,
     corner: { mouth: 0.096, taper: 0.06, jaw: 0.45, shelf: 0.15, knuckle: 0.013 },
     middle: { mouth: 0.108, spread: 0.05, jaw: 0.50, shelf: 0.0, knuckle: 0.016 },
-    mu: { slide: 0.2, roll: 0.023, spin: 18, ball: 0.05, cushion: 0.18 },
-    e: { ball: 0.94, cushion: 0.68 }, vmax: 7.0,
+    mu: { slide: 0.2, roll: 0.023, spin: 11, cushion: 0.35 },
+    e: { ball: 0.94, cushion: 0.95 }, nose: 0.40, vmax: 7.0,
   },
   uk: {
     name: "UK 8-ball", L: 1.83, W: 0.915, R: 0.0254, cw: 0.042,
     corner: { mouth: 0.100, taper: 0.06, jaw: 0.45, shelf: 0.15, knuckle: 0.013 },
     middle: { mouth: 0.106, spread: 0.05, jaw: 0.50, shelf: 0.0, knuckle: 0.014 },
-    mu: { slide: 0.2, roll: 0.027, spin: 18, ball: 0.05, cushion: 0.18 },
-    e: { ball: 0.94, cushion: 0.71 }, vmax: 8.5,
+    mu: { slide: 0.2, roll: 0.027, spin: 11, cushion: 0.35 },
+    e: { ball: 0.94, cushion: 0.92 }, nose: 0.30, vmax: 8.5,
   },
   us: {
     name: "US 8-ball", L: 2.24, W: 1.12, R: 0.028575, cw: 0.05,
     corner: { mouth: 0.126, taper: 0.06, jaw: 0.45, shelf: 0.15, knuckle: 0.010 },
     middle: { mouth: 0.140, spread: 0.05, jaw: 0.50, shelf: 0.0, knuckle: 0.011 },
-    mu: { slide: 0.2, roll: 0.025, spin: 18, ball: 0.05, cushion: 0.18 },
-    e: { ball: 0.95, cushion: 0.73 }, vmax: 10.0,
+    mu: { slide: 0.2, roll: 0.025, spin: 11, cushion: 0.35 },
+    e: { ball: 0.95, cushion: 0.92 }, nose: 0.27, vmax: 10.0,
   },
 };
 
 SPECS.nine = { ...SPECS.us, name: "9-ball" };
+
+// Friction between two balls falls away as they rub faster (measured on phenolic balls):
+// lots of "throw" on a soft shot, very little on a hard one.
+export const ballMu = v => 0.01 + 0.108 * Math.exp(-1.088 * v);
 
 // ---------------------------------------------------------------- small vector helpers
 const hyp = Math.hypot;
@@ -125,11 +129,13 @@ export function buildTable(gameId) {
     const s = Math.sqrt(q); return ax === "y" ? [{ x: c.x - s, y: v }, { x: c.x + s, y: v }] : [{ x: v, y: c.y - s }, { x: v, y: c.y + s }];
   };
   const near = (pts, J) => pts.sort((m, n) => Math.hypot(m.x - J.x, m.y - J.y) - Math.hypot(n.x - J.x, n.y - J.y))[0];
-  const cushionShapes = cushions.map((pts, i) => {
+  // kept in parts too, so the drawing knows which stretch is the nose and which the ends
+  const cushionParts = cushions.map((pts, i) => {
     const a = pockets[i], b = pockets[(i + 1) % 6], line = backLine[i];
     const Ka = near(meet(a.drop, line), a.cutExit), Kb = near(meet(b.drop, line), b.cutEntry);
-    return [Ka, ...arc(a.drop, Ka, a.cutExit), ...pts, ...arc(b.drop, b.cutEntry, Kb), Kb];
+    return { Ka, arcA: arc(a.drop, Ka, a.cutExit), pts, arcB: arc(b.drop, b.cutEntry, Kb), Kb };
   });
+  const cushionShapes = cushionParts.map(c => [c.Ka, ...c.arcA, ...c.pts, ...c.arcB, c.Kb]);
   const segs = [];
   const addSeg = (p, q) => { const dx = q.x - p.x, dy = q.y - p.y, l2 = dx * dx + dy * dy; if (l2 > 1e-12) segs.push({ ax: p.x, ay: p.y, dx, dy, l2 }); };
   cushions.forEach(pts => { for (let i = 0; i < pts.length - 1; i++) addSeg(pts[i], pts[i + 1]); });
@@ -143,7 +149,7 @@ export function buildTable(gameId) {
     p.wall = back;
     for (let i = 0; i < back.length - 1; i++) addSeg(back[i], back[i + 1]);
   });
-  return { id: gameId, spec: S, L, W, R, cw, pockets, cushions, cushionShapes, segs };
+  return { id: gameId, spec: S, L, W, R, cw, pockets, cushions, cushionShapes, cushionParts, segs };
 }
 
 // ---------------------------------------------------------------- simulation
@@ -257,14 +263,18 @@ export class World {
         if (vn > 0) {
           const jn = vn * (1 + S.e.ball) / 2;
           a.vx -= jn * nx; a.vy -= jn * ny; b.vx += jn * nx; b.vy += jn * ny;
-          // friction between the balls (throw): acts on the horizontal sliding at the contact
-          const sx = (a.vx - b.vx) - R * (a.wz + b.wz) * ny, sy = (a.vy - b.vy) + R * (a.wz + b.wz) * nx;
-          const sn = sx * nx + sy * ny, tx = sx - sn * nx, ty = sy - sn * ny, ts = hyp(tx, ty);
+          // Friction between the balls. The two surfaces rub past each other in 3D: sideways from the
+          // cut and any side spin, up or down from follow and screw. The rubbing "throws" the object
+          // ball off line, passes on a little spin, and shares one grip between both directions.
+          const wzs = a.wz + b.wz, wxs = a.wx + b.wx, wys = a.wy + b.wy;
+          const sx = (a.vx - b.vx) - R * wzs * ny, sy = (a.vy - b.vy) + R * wzs * nx, sz = R * (wxs * ny - wys * nx);
+          const sn = sx * nx + sy * ny, tx = sx - sn * nx, ty = sy - sn * ny, ts = Math.hypot(tx, ty, sz);
           if (ts > 1e-6) {
-            const jt = Math.min(S.mu.ball * jn, ts / 7), ux = tx / ts, uy = ty / ts;
+            const jt = Math.min(ballMu(ts) * jn, ts / 7), ux = tx / ts, uy = ty / ts, uz = sz / ts;
             a.vx -= jt * ux; a.vy -= jt * uy; b.vx += jt * ux; b.vy += jt * uy;
-            const dw = -2.5 / R * jt * (nx * uy - ny * ux);
-            a.wz += dw; b.wz += dw;
+            const k = -2.5 / R * jt; // both balls turn the same way: k * (n x u)
+            const dwx = k * ny * uz, dwy = -k * nx * uz, dwz = k * (nx * uy - ny * ux);
+            a.wx += dwx; a.wy += dwy; a.wz += dwz; b.wx += dwx; b.wy += dwy; b.wz += dwz;
           }
           if (vn > 0.002) this.events.push({ t: "hit", a: a.id, b: b.id, time: this.time, v: vn });
           any = true;
@@ -279,6 +289,7 @@ export class World {
 
   collideCushions() {
     const T = this.t, R = T.R, L = T.L, W = T.W, S = T.spec, R2 = R * R, m = R * 1.05, hmax = (this.h || 0.004) * 1.5;
+    const sT = S.nose, cT = Math.sqrt(1 - sT * sT);
     for (const b of this.balls) {
       if (!b.on) continue;
       if (b.x > m && b.x < L - m && b.y > m && b.y < W - m) continue;
@@ -297,20 +308,21 @@ export class World {
         const cx = s.ax + s.dx * t2, cy = s.ay + s.dy * t2, gx = b.x - cx, gy = b.y - cy, gd = Math.hypot(gx, gy) || 1e-9;
         if (b.vx * gx + b.vy * gy < 0) { nx = gx / gd; ny = gy / gd; vn = b.vx * nx + b.vy * ny; }
         else { b.x += b.vx * tau; b.y += b.vy * tau; tau = 0; }
-        const jn = -(1 + S.e.cushion) * vn;
-        b.vx += jn * nx; b.vy += jn * ny;
-        // side spin grips the cushion and changes the angle it comes off
-        const sx = b.vx + R * b.wz * ny, sy = b.vy - R * b.wz * nx;
-        const sn = sx * nx + sy * ny, tx = sx - sn * nx, ty = sy - sn * ny, ts = hyp(tx, ty);
-        if (ts > 1e-6) {
-          const jt = Math.min(S.mu.cushion * jn, ts * 2 / 7), ex = tx / ts, ey = ty / ts;
-          b.vx -= jt * ex; b.vy -= jt * ey;
-          b.wz += 2.5 / R * jt * (nx * ey - ny * ex);
+        // The cushion nose meets the ball above its centre. Work the bounce out at that point in 3D:
+        // the push back along the line to the nose, plus the grip of the cloth against whatever
+        // the ball's surface is doing there (its roll, and any side). The bed stops it being driven down.
+        const c1 = -cT * nx, c2 = -cT * ny;                       // from the centre to the nose (its upward part is sT)
+        const vc = b.vx * c1 + b.vy * c2;                          // closing speed along that line
+        const ux = b.vx + R * (b.wy * sT - b.wz * c2), uy = b.vy + R * (b.wz * c1 - b.wx * sT), uz = R * (b.wx * c2 - b.wy * c1);
+        const sx = ux - vc * c1, sy = uy - vc * c2, sz = uz - vc * sT, sl = Math.hypot(sx, sy, sz);
+        const pn = (1 + S.e.cushion) * vc;
+        b.vx -= pn * c1; b.vy -= pn * c2;
+        if (sl > 1e-9) {
+          const pt = Math.min(S.mu.cushion * pn, sl / 3.5), tx = sx / sl, ty = sy / sl, tz = sz / sl;
+          b.vx -= pt * tx; b.vy -= pt * ty;
+          const k = -2.5 / R * pt;
+          b.wx += k * (c2 * tz - sT * ty); b.wy += k * (sT * tx - c1 * tz); b.wz += k * (c1 * ty - c2 * tx);
         }
-        // the cushion nose sits above the ball's centre: it kills most of the roll into it
-        const ax = -ny, ay = nx;
-        const wa = b.wx * ax + b.wy * ay, nwa = wa * -0.25;
-        b.wx += (nwa - wa) * ax; b.wy += (nwa - wa) * ay;
         if (tau) { b.x += b.vx * tau; b.y += b.vy * tau; }
         // keep it out of the cushion
         let t3 = ((b.x - s.ax) * s.dx + (b.y - s.ay) * s.dy) / s.l2; t3 = t3 < 0 ? 0 : t3 > 1 ? 1 : t3;
@@ -327,10 +339,8 @@ export class World {
       if (!b.on) continue;
       if (b.x > R && b.x < L - R && b.y > R && b.y < W - R) continue;
       for (const p of T.pockets) {
-        const rx = b.x - p.M.x, ry = b.y - p.M.y, depth = rx * p.o.x + ry * p.o.y;
-        if (depth < p.fall) continue;
-        const side = Math.abs(rx * p.o.y - ry * p.o.x);
-        if (side > p.mouth) continue;
+        const hx = b.x - p.drop.x, hy = b.y - p.drop.y;
+        if (hx * hx + hy * hy >= p.drop.r * p.drop.r) continue; // not over the hole yet
         b.on = false; b.pocket = p.id;
         b.potV = { x: b.vx, y: b.vy };
         b.vx = b.vy = b.wx = b.wy = b.wz = 0;
