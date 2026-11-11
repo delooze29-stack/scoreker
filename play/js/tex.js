@@ -111,7 +111,7 @@ export function ballTex(d) {
       });
     }
   });
-  ballCache.set(key, t); return t;
+  t.keep = true; ballCache.set(key, t); return t;
 }
 
 export function radialTex(stops, size = 128) {

@@ -87,7 +87,16 @@ export class View {
 
   // -------------------------------------------------------------- table + room
   build(table, game, style) {
-    if (this.group) { this.scene.remove(this.group); this.group.traverse(o => { if (o.geometry) o.geometry.dispose(); }); }
+    if (this.group) { // clear the last table out properly, textures and all (ball designs are shared and kept)
+      this.scene.remove(this.group);
+      this.group.traverse(o => {
+        if (o.geometry) o.geometry.dispose();
+        (Array.isArray(o.material) ? o.material : o.material ? [o.material] : []).forEach(m => {
+          for (const k of ["map", "normalMap", "emissiveMap"]) if (m[k] && !m[k].keep) m[k].dispose();
+          m.dispose();
+        });
+      });
+    }
     const G = this.group = new THREE.Group(); this.scene.add(G);
     this.table = table; this.game = game; this.style = style;
     const { L, W } = table, hi = this.quality === "high";
@@ -181,6 +190,8 @@ export class View {
     this.guide.glow = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: glowTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
     this.guide.glow.renderOrder = 2;
     Object.values(this.guide).forEach(o => { o.visible = false; this.group.add(o); });
+    // the cue ball's predicted run after contact: a short chain of strips that can curve
+    this.guidePath = []; for (let i = 0; i < 16; i++) { const m = mk(0xbfe3ff, 0.75, R * 0.13); m.visible = false; this.group.add(m); this.guidePath.push(m); }
     this.zoneMesh = null;
   }
 
@@ -251,16 +262,20 @@ export class View {
   }
   setGuides(g) {
     const G = this.guide, h = 0.004;
+    // keep the lines readable from a high or distant camera: widen them with distance
+    const far = g && g.from ? Math.max(1, Math.min(4.5, this.camera.position.distanceTo(V3(g.from.x, 0, g.from.y)) / 0.75)) : 1;
     const line = (o, a, b) => {
       o.visible = !!(a && b); if (!o.visible) return;
       const dx = b.x - a.x, dy = b.y - a.y, l = Math.hypot(dx, dy); if (l < 1e-4) { o.visible = false; return; }
       o.position.copy(V3((a.x + b.x) / 2, h, (a.y + b.y) / 2));
       o.rotation.set(-Math.PI / 2, 0, Math.atan2(dy, dx));
-      o.scale.set(l, o.userData.w, 1);
+      o.scale.set(l, o.userData.w * far, 1);
     };
     line(G.aim, g && g.from, g && g.to);
     line(G.obj, g && g.objFrom, g && g.objTo);
     line(G.cue, g && g.cueFrom, g && g.cueTo);
+    const path = g && g.cuePath, np = path ? Math.min(this.guidePath.length, path.length - 1) : 0;
+    this.guidePath.forEach((m, i) => { if (i < np) { line(m, path[i], path[i + 1]); m.material.opacity = 0.75 * (1 - i / np * 0.75); } else m.visible = false; });
     G.ghost.visible = !!(g && g.ghost);
     if (G.ghost.visible) G.ghost.position.copy(V3(g.ghost.x, h, g.ghost.y));
     G.glow.visible = !!(g && g.from);
@@ -322,6 +337,11 @@ export class View {
       const z = v.zoom || 1, back = (0.34 + p * 1.1) * z + (v.mode === "follow" ? 0 : v.draw || 0), ahead = 1.05 - p * 0.55;
       let high = (0.12 + p * 1.15) * z;
       if (v.mode !== "follow" && this.cue.visible && this.cueElev > 0.09) high = Math.max(high, R + (back + 0.05) * Math.tan(this.cueElev) + 0.07);
+      if (v.mode !== "follow") { // standing behind a ball near the rail: lift the eye until the ball shows over the cushion
+        const bx = -ux, by = -uy, dx = bx > 0 ? (L - v.cue.x) / bx : bx < 0 ? -v.cue.x / bx : Infinity, dy = by > 0 ? (W - v.cue.y) / by : by < 0 ? -v.cue.y / by : Infinity;
+        const dn = Math.max(0.03, Math.min(dx, dy));
+        if (back > dn) high = Math.max(high, Math.min(0.85 * Math.max(1, z), R * 0.4 + (this.rh + 0.012 - R * 0.4) * back / dn));
+      }
       let eye = { x: v.cue.x - ux * back, y: v.cue.y - uy * back }, look = { x: v.cue.x + ux * ahead, y: v.cue.y + uy * ahead };
       if (v.mode === "follow" && v.track) { look = { x: v.track.x, y: v.track.y }; eye = v.eye || eye; }
       this.camTo(V3(eye.x, high, eye.y), V3(look.x, 0, look.y), new THREE.Vector3(0, 1, 0), v.mode === "follow" ? 4 : 18, dt, snap);

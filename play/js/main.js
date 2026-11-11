@@ -572,17 +572,45 @@ function clip(a, b) {
   if (dy > 0) t = Math.min(t, (hi.y - a.y) / dy); if (dy < 0) t = Math.min(t, (lo.y - a.y) / dy);
   t = Math.max(0, t); return { x: a.x + dx * t, y: a.y + dy * t };
 }
-function guides() {
+// What the shot will really do at a medium pace: where the object ball sets off once the rub between
+// the balls has "thrown" it, and how the cue ball runs on with the spin that's set.
+let pred = null, predKey = "";
+function predict(lim) {
+  const c = cueBall(), key = `${aim.toFixed(5)}|${spin.x.toFixed(2)}|${lim.y.toFixed(2)}|${c.x.toFixed(4)}|${c.y.toFixed(4)}|${W.balls.reduce((n, b) => n + (b.on ? b.id + 1 : 0), 0)}`;
+  if (key === predKey) return pred;
+  predKey = key; pred = null;
+  const w = W.clone(); w.balls.forEach(b => { b.vx = b.vy = b.wx = b.wy = b.wz = 0; });
+  w.strike(0, aim, speedFor(0.45), spin.x, lim.y);
+  const cb = w.ball(0); let hit = null;
+  for (let i = 0; i < 500 && !hit; i++) {
+    w.advance(0.004);
+    hit = w.events.find(e => e.t === "hit" && (e.a === 0 || e.b === 0));
+    if (!hit && (w.events.length || !w.moving())) return null; // a cushion first, or it never gets there
+  }
+  if (!hit) return null;
+  const o = w.ball(hit.a === 0 ? hit.b : hit.a), os = Math.hypot(o.vx, o.vy);
+  const path = [{ x: cb.x, y: cb.y }]; let len = 0;
+  for (let i = 0; i < 15 && cb.on; i++) {
+    w.advance(0.02); const l = path[path.length - 1], d = Math.hypot(cb.x - l.x, cb.y - l.y);
+    if (d < 0.002) break; len += d; path.push({ x: cb.x, y: cb.y }); if (len > 0.45 || w.events.some(e => e.id === 0 && e.t !== "hit")) break;
+  }
+  return pred = { ball: o.id, obj: os > 0.01 ? { x: o.vx / os, y: o.vy / os } : null, path: path.length > 1 ? path : null };
+}
+function guides(lim) {
   if (mode !== "aim" || cfg.guides === "off") { view.setGuides(null); return castFirst(T, W.balls, 0, aim); }
   const c = cueBall(), hit = castFirst(T, W.balls, 0, aim), g = { from: c, to: clip(c, hit) };
   if (hit.ball) {
     g.ghost = hit;
-    const nx = hit.ball.x - hit.x, ny = hit.ball.y - hit.y, nl = Math.hypot(nx, ny), n = { x: nx / nl, y: ny / nl };
+    const p = lim && !S.isBreak ? predict(lim) : null, ok = p && p.ball === hit.ball.id; // (a break into the pack isn't worth predicting)
+    const nx = hit.ball.x - hit.x, ny = hit.ball.y - hit.y, nl = Math.hypot(nx, ny), n = ok && p.obj ? p.obj : { x: nx / nl, y: ny / nl };
     const len = cfg.guides === "full" ? 0.55 : 0.14;
     g.objFrom = hit.ball; g.objTo = clip(hit.ball, { x: hit.ball.x + n.x * len, y: hit.ball.y + n.y * len });
     if (cfg.guides === "full") {
-      const ux = Math.cos(aim), uy = Math.sin(aim), dn = ux * n.x + uy * n.y; let tx = ux - dn * n.x, ty = uy - dn * n.y; const tl = Math.hypot(tx, ty);
-      if (tl > 0.02) { tx /= tl; ty /= tl; g.cueFrom = hit; g.cueTo = clip(hit, { x: hit.x + tx * 0.25 * tl, y: hit.y + ty * 0.25 * tl }); }
+      if (ok && p.path) g.cuePath = p.path.map((q, i) => i ? clip(p.path[0], q) : q);
+      else {
+        const ux = Math.cos(aim), uy = Math.sin(aim), dn = ux * n.x + uy * n.y; let tx = ux - dn * n.x, ty = uy - dn * n.y; const tl = Math.hypot(tx, ty);
+        if (tl > 0.02) { tx /= tl; ty /= tl; g.cueFrom = hit; g.cueTo = clip(hit, { x: hit.x + tx * 0.25 * tl, y: hit.y + ty * 0.25 * tl }); }
+      }
     }
   } else g.ghost = hit;
   view.setGuides(g);
@@ -670,7 +698,7 @@ function frame(now) {
       view.setCue(true, through, through.angle, through.spin, -reach * ease + back * back * T.R * 12, through.elev);
     } else view.setCue(false);
     if (mode === "aim") showCushionLimit(lim);
-    const hit = mode === "aim" ? guides() : (view.setGuides(null), null);
+    const hit = mode === "aim" ? guides(lim) : (view.setGuides(null), null);
     $("inset").hidden = mode !== "aim" || !c.on || viewMode === "top";
     if (!$("inset").hidden) drawOverlap(hit);
     // camera
@@ -706,4 +734,4 @@ try {
 } catch (e) { console.error(e); $("menu").querySelector("p").textContent = "Your browser couldn't start the 3D table."; }
 hud();
 requestAnimationFrame(frame);
-window.__game = { get view() { return view; }, get T() { return T; }, zoom, pull: p => shoot(p), get S() { return S; }, get W() { return W; }, get mode() { return mode; }, set aim(a) { aim = a; }, get aim() { return aim; }, set pitch(p) { pitch = p; }, shoot, cfg, endFrame: () => { S.over = { winner: 0, text: 'Test frame over.' }; nextTurn(); }, renderInfo: () => view.renderer.info.render };
+window.__game = { setSpin: (x, y) => setSpin(x, y), get view() { return view; }, get T() { return T; }, zoom, pull: p => shoot(p), get S() { return S; }, get W() { return W; }, get mode() { return mode; }, set aim(a) { aim = a; }, get aim() { return aim; }, set pitch(p) { pitch = p; }, shoot, cfg, endFrame: () => { S.over = { winner: 0, text: 'Test frame over.' }; nextTurn(); }, renderInfo: () => view.renderer.info.render };
