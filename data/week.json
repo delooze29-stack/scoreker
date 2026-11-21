@@ -1,7 +1,7 @@
 {
   "weekId": "2026-11-21",
   "createdAt": "2026-11-20T16:03:25.819Z",
-  "updatedAt": "2026-11-20T16:03:25.819Z",
+  "updatedAt": "2026-11-21T21:43:32.387Z",
   "red": {
     "id": "6ef39b0fd8839f6e93a3de32523e9807",
     "sport": "soccer_epl",
@@ -14,8 +14,11 @@
       "draw": 5.27,
       "away": 7.26
     },
-    "status": "NS",
-    "result": null,
+    "status": "FT",
+    "result": [
+      1,
+      1
+    ],
     "colour": "red"
   },
   "free": [
@@ -31,8 +34,11 @@
         "draw": 6.82,
         "away": 10.95
       },
-      "status": "NS",
-      "result": null,
+      "status": "FT",
+      "result": [
+        1,
+        1
+      ],
       "colour": "yellow"
     },
     {
@@ -47,8 +53,11 @@
         "draw": 5.29,
         "away": 8.57
       },
-      "status": "NS",
-      "result": null,
+      "status": "FT",
+      "result": [
+        2,
+        1
+      ],
       "colour": "green"
     },
     {
@@ -63,8 +72,11 @@
         "draw": 4.97,
         "away": 7
       },
-      "status": "NS",
-      "result": null,
+      "status": "FT",
+      "result": [
+        2,
+        0
+      ],
       "colour": "brown"
     },
     {
@@ -95,8 +107,11 @@
         "draw": 3.39,
         "away": 2.39
       },
-      "status": "NS",
-      "result": null,
+      "status": "FT",
+      "result": [
+        1,
+        1
+      ],
       "colour": "pink"
     },
     {
@@ -111,8 +126,11 @@
         "draw": 3.27,
         "away": 2.68
       },
-      "status": "NS",
-      "result": null,
+      "status": "FT",
+      "result": [
+        2,
+        2
+      ],
       "colour": "black"
     }
   ],
@@ -145,8 +163,11 @@
         "draw": 4.42,
         "away": 5.49
       },
-      "status": "NS",
-      "result": null,
+      "status": "FT",
+      "result": [
+        2,
+        0
+      ],
       "colour": "green"
     },
     {
@@ -161,8 +182,11 @@
         "draw": 4.16,
         "away": 1.56
       },
-      "status": "NS",
-      "result": null,
+      "status": "FT",
+      "result": [
+        2,
+        2
+      ],
       "colour": "brown"
     },
     {
@@ -177,8 +201,11 @@
         "draw": 3.83,
         "away": 4.38
       },
-      "status": "NS",
-      "result": null,
+      "status": "FT",
+      "result": [
+        0,
+        0
+      ],
       "colour": "blue"
     },
     {
@@ -193,8 +220,11 @@
         "draw": 3.56,
         "away": 3.8
       },
-      "status": "NS",
-      "result": null,
+      "status": "FT",
+      "result": [
+        2,
+        0
+      ],
       "colour": "pink"
     },
     {
@@ -209,8 +239,11 @@
         "draw": 3.5,
         "away": 2.75
       },
-      "status": "NS",
-      "result": null,
+      "status": "FT",
+      "result": [
+        3,
+        2
+      ],
       "colour": "black"
     }
   ],
