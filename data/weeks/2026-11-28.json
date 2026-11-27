@@ -1,0 +1,235 @@
+{
+  "weekId": "2026-11-28",
+  "createdAt": "2026-11-27T17:24:31.426Z",
+  "updatedAt": "2026-11-27T17:24:31.426Z",
+  "red": {
+    "id": "40d95e660c301c2d8a5a7a6317017b65",
+    "sport": "soccer_epl",
+    "league": "PL",
+    "home": "Nottingham Forest",
+    "away": "Chelsea",
+    "kickoff": "2026-11-27T20:00:00Z",
+    "odds": {
+      "home": 2.4,
+      "draw": 3.41,
+      "away": 2.86
+    },
+    "status": "NS",
+    "result": null,
+    "colour": "red"
+  },
+  "free": [
+    {
+      "id": "15fc58a442321c2a85f7a814466c0ab9",
+      "sport": "soccer_efl_champ",
+      "league": "Championship",
+      "home": "Birmingham City",
+      "away": "Bolton Wanderers",
+      "kickoff": "2026-11-28T15:00:00Z",
+      "odds": {
+        "home": 1.48,
+        "draw": 4.56,
+        "away": 5.77
+      },
+      "status": "NS",
+      "result": null,
+      "colour": "yellow"
+    },
+    {
+      "id": "d2bc2d3b4a81177cb6b86f4add6ff81f",
+      "sport": "soccer_efl_champ",
+      "league": "Championship",
+      "home": "Lincoln City",
+      "away": "Wolverhampton Wanderers",
+      "kickoff": "2026-11-28T12:30:00Z",
+      "odds": {
+        "home": 5.76,
+        "draw": 4,
+        "away": 1.55
+      },
+      "status": "NS",
+      "result": null,
+      "colour": "green"
+    },
+    {
+      "id": "c836236766f7859e3c1d61caa581abe1",
+      "sport": "soccer_efl_champ",
+      "league": "Championship",
+      "home": "West Ham United",
+      "away": "Stoke City",
+      "kickoff": "2026-11-28T15:00:00Z",
+      "odds": {
+        "home": 1.64,
+        "draw": 4.08,
+        "away": 4.69
+      },
+      "status": "NS",
+      "result": null,
+      "colour": "brown"
+    },
+    {
+      "id": "d47bc722be164b3a733434e89f224654",
+      "sport": "soccer_efl_champ",
+      "league": "Championship",
+      "home": "Preston North End",
+      "away": "Norwich City",
+      "kickoff": "2026-11-28T12:30:00Z",
+      "odds": {
+        "home": 4.34,
+        "draw": 3.97,
+        "away": 1.7
+      },
+      "status": "NS",
+      "result": null,
+      "colour": "blue"
+    },
+    {
+      "id": "9cd8c682c6864b59a7f1a58964083e08",
+      "sport": "soccer_efl_champ",
+      "league": "Championship",
+      "home": "Wrexham AFC",
+      "away": "Portsmouth",
+      "kickoff": "2026-11-28T15:00:00Z",
+      "odds": {
+        "home": 2.19,
+        "draw": 3.18,
+        "away": 3.37
+      },
+      "status": "NS",
+      "result": null,
+      "colour": "pink"
+    },
+    {
+      "id": "3f93526d7c8e0ca84734aea60c13900a",
+      "sport": "soccer_efl_champ",
+      "league": "Championship",
+      "home": "Millwall",
+      "away": "Burnley",
+      "kickoff": "2026-11-28T15:00:00Z",
+      "odds": {
+        "home": 2.11,
+        "draw": 3.57,
+        "away": 3.16
+      },
+      "status": "NS",
+      "result": null,
+      "colour": "black"
+    }
+  ],
+  "clear": [
+    {
+      "id": "e9c2b74ecaafd494e3b2d8521b52216a",
+      "sport": "soccer_epl",
+      "league": "PL",
+      "home": "Brighton and Hove Albion",
+      "away": "Newcastle United",
+      "kickoff": "2026-11-29T14:05:00Z",
+      "odds": {
+        "home": 1.55,
+        "draw": 4.42,
+        "away": 5.14
+      },
+      "status": "NS",
+      "result": null,
+      "colour": "yellow"
+    },
+    {
+      "id": "f45e9062c2f755b977c98d496c22697b",
+      "sport": "soccer_epl",
+      "league": "PL",
+      "home": "Everton",
+      "away": "Liverpool",
+      "kickoff": "2026-11-29T12:00:00Z",
+      "odds": {
+        "home": 4.37,
+        "draw": 3.84,
+        "away": 1.75
+      },
+      "status": "NS",
+      "result": null,
+      "colour": "green"
+    },
+    {
+      "id": "e12585885a7f135127f276b7f1ecdf89",
+      "sport": "soccer_epl",
+      "league": "PL",
+      "home": "Crystal Palace",
+      "away": "Hull City",
+      "kickoff": "2026-11-29T14:05:00Z",
+      "odds": {
+        "home": 1.88,
+        "draw": 3.7,
+        "away": 3.83
+      },
+      "status": "NS",
+      "result": null,
+      "colour": "brown"
+    },
+    {
+      "id": "09bb0ba9a9025d64fed410375c0c8f80",
+      "sport": "soccer_epl",
+      "league": "PL",
+      "home": "Sunderland",
+      "away": "Tottenham Hotspur",
+      "kickoff": "2026-11-29T14:05:00Z",
+      "odds": {
+        "home": 3.7,
+        "draw": 3.39,
+        "away": 2
+      },
+      "status": "NS",
+      "result": null,
+      "colour": "blue"
+    },
+    {
+      "id": "9d23f6ad21946dd258869ebc22236cf0",
+      "sport": "soccer_epl",
+      "league": "PL",
+      "home": "Ipswich Town",
+      "away": "Aston Villa",
+      "kickoff": "2026-11-28T17:30:00Z",
+      "odds": {
+        "home": 3.42,
+        "draw": 3.77,
+        "away": 1.97
+      },
+      "status": "NS",
+      "result": null,
+      "colour": "pink"
+    },
+    {
+      "id": "56ea91809ff11d3a67557a21b3371cb9",
+      "sport": "soccer_epl",
+      "league": "PL",
+      "home": "Fulham",
+      "away": "Bournemouth",
+      "kickoff": "2026-11-29T14:05:00Z",
+      "odds": {
+        "home": 2.75,
+        "draw": 3.43,
+        "away": 2.44
+      },
+      "status": "NS",
+      "result": null,
+      "colour": "black"
+    }
+  ],
+  "tiebreak": {
+    "id": "d20ede55e54ed7b55fdc36ca373727c0",
+    "sport": "soccer_epl",
+    "league": "PL",
+    "home": "Arsenal",
+    "away": "Manchester City",
+    "kickoff": "2026-11-29T16:30:00Z",
+    "odds": {
+      "home": 1.95,
+      "draw": 3.67,
+      "away": 3.57
+    },
+    "status": "NS",
+    "result": null
+  },
+  "redKickoff": "2026-11-27T20:00:00Z",
+  "freeLock": "2026-11-28T12:30:00.000Z",
+  "notes": []
+}
